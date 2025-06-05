@@ -162,8 +162,15 @@ class Ui_MainWindow:
         self.autoLoginGroup = QtWidgets.QGroupBox("自动化")
         autoLoginLayout = QVBoxLayout(self.autoLoginGroup)
         autoLoginLayout.setContentsMargins(10, 10, 10, 10)
+        autoLoginLayout.setSpacing(8)  # 设置按钮间距
         
-        self.oneClickLoginBtn = QtWidgets.QPushButton("一键进入崩坏3")
+        # 打开崩坏3按钮
+        self.launchGameBtn = QtWidgets.QPushButton("打开崩坏3")
+        self.launchGameBtn.setMinimumHeight(35)
+        autoLoginLayout.addWidget(self.launchGameBtn)
+        
+        # 一键登录崩坏3按钮（重命名）
+        self.oneClickLoginBtn = QtWidgets.QPushButton("一键登录崩坏3")
         self.oneClickLoginBtn.setMinimumHeight(40)  # 设置最小高度
         autoLoginLayout.addWidget(self.oneClickLoginBtn)
         
@@ -199,6 +206,13 @@ class Ui_MainWindow:
         self.autoCloseCheck = QtWidgets.QCheckBox()
         gridLayout.addWidget(auto_close_label, row, 0, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         gridLayout.addWidget(self.autoCloseCheck, row, 1, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+        row += 1
+        
+        # 新增：自动切换扫码模式
+        auto_switch_label = QtWidgets.QLabel("自动切换扫码模式:")
+        self.autoSwitchModeCheck = QtWidgets.QCheckBox()
+        gridLayout.addWidget(auto_switch_label, row, 0, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        gridLayout.addWidget(self.autoSwitchModeCheck, row, 1, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
 
         # 设置列拉伸比例
         gridLayout.setColumnStretch(0, 1)  # 标签列可扩展
@@ -224,7 +238,8 @@ class Ui_MainWindow:
             "2. 账号密码会储存在配置文件内<br>"
             "3. 启用解析二维码功能后，会读取剪贴板中崩坏3登录码并扫码<br>"
             "4. 自动截屏仅在崩坏3为焦点窗口时可用<br>"
-            "5. 使用\"一键登陆崩坏3\"需要点击“配置路径”并选择\"BH3.exe\"<br>"
+            "5. 使用\"一键登录崩坏3\"需要点击\"配置路径\"并选择\"BH3.exe\"<br>"
+            "6. 自动切换扫码模式会在启动游戏时自动切换到扫码登录界面<br>"
             "参考路径：C:\\miHoYo Launcher\\games\\Honkai Impact 3rd Game\\BH3.exe"
         )
 
@@ -238,5 +253,7 @@ class Ui_MainWindow:
         self.clipCheck.clicked.connect(MainWindow.qrCodeSwitch)
         self.autoCloseCheck.clicked.connect(MainWindow.autoCloseSwitch)
         self.autoClipCheck.clicked.connect(MainWindow.autoClipSwitch)
+        self.autoSwitchModeCheck.clicked.connect(MainWindow.autoSwitchModeSwitch)  # 新信号连接
         self.configGamePathBtn.clicked.connect(MainWindow.configGamePath)
-        self.oneClickLoginBtn.clicked.connect(MainWindow.launchGame)
+        self.launchGameBtn.clicked.connect(MainWindow.launchGame)  # 新按钮连接到launchGame
+        self.oneClickLoginBtn.clicked.connect(MainWindow.oneClickLogin)  # 重命名按钮连接到oneClickLogin

@@ -7,15 +7,14 @@ import time
 import webbrowser
 from json.decoder import JSONDecodeError
 from threading import Thread
-from PyQt6.QtCore import QThread, pyqtSignal, QObject, Qt
+from PyQt6.QtCore import QThread, pyqtSignal, QObject, Qt, QTimer
 from PyQt6.QtWidgets import QApplication, QMainWindow, QFileDialog, QMessageBox
 from PIL import ImageGrab
 from pyzbar.pyzbar import decode
 import subprocess
 import mainWindow
 from flask import Flask, abort, render_template, request
-from PIL import Image, ImageGrab
-
+from PIL import Image
 
 # ========== EmittingStream 类：用于拦截 stdout 输出 ==========
 class EmittingStream(QObject):
@@ -39,7 +38,7 @@ m_cast_group_port = 12585
 bh_info = {}
 config = {}
 data = {}
-cap = None
+cap = None  # 确保在全局作用域定义
 
 
 # ========== 初始化配置文件 ==========
@@ -72,11 +71,11 @@ def init_conf():
 
 # ========== 写入配置文件 ==========
 def write_conf(old=None):
-    config_temp = json.loads('{"account":"","password":"","sleep_time":3,"ver":5,'
+    config_temp = json.loads('{"account":"","password":"","sleep_time":3,"ver":6,'
                              '"clip_check":false,"auto_close":false,"uid":0,'
                              '"access_key":"","last_login_succ":false,"bh_ver":"7.8.0",'
                              '"uname":"","auto_clip":false,"oa_token":"ebdda08dce6feb6bc552d393bae58c81",'
-                             '"game_path":""}')
+                             '"game_path":"","auto_switch_mode":false}')  # 添加 auto_switch_mode 字段
     if old is not None:
         for key in config_temp:
             try:
@@ -92,38 +91,45 @@ def write_conf(old=None):
 # ========== 登录线程 ==========
 class LoginThread(QThread):
     update_log = pyqtSignal(str)
+    login_complete = pyqtSignal(bool)  # 新增登录完成信号
 
     def run(self):
         asyncio.run(self.login())
 
     async def login(self):
-        global config, bh_info
+        global config, bh_info, cap
         print("[INFO] 登录B站账号中...")
-        import bsgamesdk
-        if config['last_login_succ']:
-            print(f"[INFO] 验证缓存账号 {config['uname']} 中...")
-            bs_user_info = await bsgamesdk.getUserInfo(config['uid'], config['access_key'])
-            if 'uname' in bs_user_info:
-                print(f"[INFO] 登录B站账号 {bs_user_info['uname']} 成功！")
-                bs_info = {'uid': config['uid'], 'access_key': config['access_key']}
+        try:
+            import bsgamesdk
+            if config['last_login_succ']:
+                print(f"[INFO] 验证缓存账号 {config['uname']} 中...")
+                bs_user_info = await bsgamesdk.getUserInfo(config['uid'], config['access_key'])
+                if 'uname' in bs_user_info:
+                    print(f"[INFO] 登录B站账号 {bs_user_info['uname']} 成功！")
+                    bs_info = {'uid': config['uid'], 'access_key': config['access_key']}
+                else:
+                    config['last_login_succ'] = False
+                    config['uid'] = 0
+                    config['access_key'] = ""
+                    config['uname'] = ""
+                    write_conf(config)
+                    print(f"[INFO] 缓存已失效，重新登录B站账号 {config['account']} 中...")
+                    bs_info = await bsgamesdk.login(config['account'], config['password'], cap)
+                    if "access_key" not in bs_info:
+                        self.handle_login_failure(bs_info)
+                        return
+                    bs_user_info = await bsgamesdk.getUserInfo(bs_info['uid'], bs_info['access_key'])
+                    print(f"[INFO] 登录B站账号 {bs_user_info['uname']} 成功！")
+                    config['uid'] = bs_info['uid']
+                    config['access_key'] = bs_info['access_key']
+                    config['last_login_succ'] = True
+                    config['uname'] = bs_user_info["uname"]
+                    write_conf(config)
             else:
-                config['last_login_succ'] = False
-                config['uid'] = 0
-                config['access_key'] = ""
-                config['uname'] = ""
-                write_conf(config)
-                print(f"[INFO] 缓存已失效，重新登录B站账号 {config['account']} 中...")
+                print(f"[INFO] 登录B站账号 {config['account']} 中...")
                 bs_info = await bsgamesdk.login(config['account'], config['password'], cap)
                 if "access_key" not in bs_info:
-                    if 'need_captch' in bs_info:
-                        print("[INFO] 需要验证码！请打开下方网址进行操作！")
-                        print("[INFO]" + bs_info['cap_url'])
-                        webbrowser.open_new(bs_info['cap_url'])
-                    else:
-                        print("[INFO] 登录失败！")
-                        print("[INFO]" + str(bs_info))
-                    ui.loginBiliBtn.setText("登陆账号")
-                    ui.loginBiliBtn.setDisabled(False)
+                    self.handle_login_failure(bs_info)
                     return
                 bs_user_info = await bsgamesdk.getUserInfo(bs_info['uid'], bs_info['access_key'])
                 print(f"[INFO] 登录B站账号 {bs_user_info['uname']} 成功！")
@@ -132,57 +138,57 @@ class LoginThread(QThread):
                 config['last_login_succ'] = True
                 config['uname'] = bs_user_info["uname"]
                 write_conf(config)
-        else:
-            print(f"[INFO] 登录B站账号 {config['account']} 中...")
-            bs_info = await bsgamesdk.login(config['account'], config['password'], cap)
-            if "access_key" not in bs_info:
-                if 'message' in bs_info:
-                    print("[INFO] 登录失败！")
-                    if bs_info['message'] == 'PWD_INVALID':
-                        print("[INFO] 账号或密码错误！")
-                        ui.loginBiliBtn.setText("登陆账号")
-                        ui.loginBiliBtn.setDisabled(False)
-                        return
-                    else:
-                        print("[INFO] 原始返回：" + bs_info['message'])
-                if 'need_captch' in bs_info:
-                    print("[INFO] 需要验证码！请打开下方网址进行操作！")
-                    print("[INFO]" + bs_info['cap_url'])
-                    webbrowser.open_new(bs_info['cap_url'])
-                else:
-                    print("[INFO] 登录失败！")
-                    print("[INFO]" + str(bs_info))
-                ui.loginBiliBtn.setText("登陆账号")
-                ui.loginBiliBtn.setDisabled(False)
+            
+            print("[INFO] 登录崩坏3账号中...")
+            import mihoyosdk
+            bh_info = await mihoyosdk.verify(bs_info['uid'], bs_info['access_key'])
+            if bh_info['retcode'] != 0:
+                print("[INFO] 登录失败！")
+                print("[INFO]" + str(bh_info))
+                self.login_complete.emit(False)
                 return
-            bs_user_info = await bsgamesdk.getUserInfo(bs_info['uid'], bs_info['access_key'])
-            print(f"[INFO] 登录B站账号 {bs_user_info['uname']} 成功！")
-            config['uid'] = bs_info['uid']
-            config['access_key'] = bs_info['access_key']
-            config['last_login_succ'] = True
-            config['uname'] = bs_user_info["uname"]
+            
+            print("[INFO] 登录成功！")
+            print("[INFO] 获取OA服务器信息中...")
+            bh_ver = await mihoyosdk.getBHVer(config)
+            config['bh_ver'] = bh_ver
             write_conf(config)
-        print("[INFO] 登录崩坏3账号中...")
-        import mihoyosdk
-        bh_info = await mihoyosdk.verify(bs_info['uid'], bs_info['access_key'])
-        if bh_info['retcode'] != 0:
+            print(f"[INFO] 当前崩坏3版本: {bh_ver}")
+            oa = await mihoyosdk.getOAServer(config['oa_token'])
+            if len(oa) < 100:
+                print("[INFO] 获取OA服务器失败！请检查Token后重试")
+                self.login_complete.emit(False)
+                return
+            
+            print("[INFO] 获取OA服务器成功！")
+            ui.loginBiliBtn.setText("账号已登录")
+            config['account_login'] = True
+            write_conf(config)
+            self.login_complete.emit(True)
+            
+        except Exception as e:
+            print(f"[ERROR] 登录过程中发生错误: {str(e)}")
+            ui.loginBiliBtn.setText("登录失败")
+            ui.loginBiliBtn.setDisabled(False)
+            self.login_complete.emit(False)
+
+    def handle_login_failure(self, bs_info):
+        if 'message' in bs_info:
             print("[INFO] 登录失败！")
-            print("[INFO]" + str(bh_info))
-            return
-        print("[INFO] 登录成功！")
-        print("[INFO] 获取OA服务器信息中...")
-        bh_ver = await mihoyosdk.getBHVer(config)
-        config['bh_ver'] = bh_ver
-        write_conf(config)
-        print(f"[INFO] 当前崩坏3版本: {bh_ver}")
-        oa = await mihoyosdk.getOAServer(config['oa_token'])
-        if len(oa) < 100:
-            print("[INFO] 获取OA服务器失败！请检查Token后重试")
-            return
-        print("[INFO] 获取OA服务器成功！")
-        ui.loginBiliBtn.setText("账号已登录")
-        config['account_login'] = True
-        write_conf(config)
+            if bs_info['message'] == 'PWD_INVALID':
+                print("[INFO] 账号或密码错误！")
+            else:
+                print("[INFO] 原始返回：" + bs_info['message'])
+        if 'need_captch' in bs_info:
+            print("[INFO] 需要验证码！请打开下方网址进行操作！")
+            print("[INFO]" + bs_info['cap_url'])
+            webbrowser.open_new(bs_info['cap_url'])
+        else:
+            print("[INFO] 登录失败！")
+            print("[INFO]" + str(bs_info))
+        ui.loginBiliBtn.setText("登陆账号")
+        ui.loginBiliBtn.setDisabled(False)
+        self.login_complete.emit(False)
 
 
 # ========== 解析线程 ==========
@@ -198,12 +204,15 @@ class ParseThread(QThread):
                 if config['auto_clip']:
                     import pyautogui
                     import pygetwindow as gw
-                    if gw.getActiveWindowTitle() == '崩坏3':
-                        window = gw.getWindowsWithTitle('崩坏3')[0]
-                        if window:
-                            left, top, right, bottom = window.left, window.top, window.right, window.bottom
-                            screenshot = pyautogui.screenshot(region=(left, top, right - left, bottom - top))
-                            await parse_pic_raw(screenshot, lambda msg: print(msg))
+                    try:
+                        if gw.getActiveWindowTitle() == '崩坏3':
+                            window = gw.getWindowsWithTitle('崩坏3')[0]
+                            if window:
+                                left, top, right, bottom = window.left, window.top, window.right, window.bottom
+                                screenshot = pyautogui.screenshot(region=(left, top, right - left, bottom - top))
+                                await parse_pic_raw(screenshot, lambda msg: print(msg))
+                    except Exception as e:
+                        print(f"[WARNING] 自动截屏时出错: {str(e)}")
                 if config['clip_check']:
                     await parse_pic(lambda msg: print(msg))
                 time.sleep(config['sleep_time'])
@@ -211,34 +220,40 @@ class ParseThread(QThread):
 
 # ========== 图像解析函数 ==========
 async def parse_pic(printLog):
-    if config['account_login']:
-        im = ImageGrab.grabclipboard()
-        if isinstance(im, Image.Image):
-            return await parse_pic_raw(im, printLog)
+    if config.get('account_login', False):
+        try:
+            im = ImageGrab.grabclipboard()
+            if isinstance(im, Image.Image):
+                return await parse_pic_raw(im, printLog)
+        except Exception as e:
+            printLog(f"[WARNING] 获取剪贴板图像时出错: {str(e)}")
     else:
-        print("[DEBUG] 当前未登录或登陆中，跳过当前图片处理")
+        printLog("[DEBUG] 当前未登录或登陆中，跳过当前图片处理")
 
 
 async def parse_pic_raw(im, printLog):
     if isinstance(im, Image.Image):
         printLog("[INFO] 识别到图片，开始检测是否为崩坏3登陆码")
-        result = decode(im)
-        if len(result) >= 1:
-            url = result[0].data.decode('utf-8')
-            param = url.split('?')[1]
-            params = param.split('&')
-            ticket = ''
-            for element in params:
-                if element.split('=')[0] == 'ticket':
-                    ticket = element.split('=')[1]
-                    break
-            printLog("[INFO] 二维码识别成功，开始请求崩坏3服务器完成扫码")
-            import mihoyosdk
-            await mihoyosdk.scanCheck(lambda msg: print(msg), bh_info, ticket, config)
-            time.sleep(1)
-            clear_clipboard()
-        else:
-            printLog("[DEBUG] 非登陆码，跳过")
+        try:
+            result = decode(im)
+            if len(result) >= 1:
+                url = result[0].data.decode('utf-8')
+                param = url.split('?')[1]
+                params = param.split('&')
+                ticket = ''
+                for element in params:
+                    if element.split('=')[0] == 'ticket':
+                        ticket = element.split('=')[1]
+                        break
+                printLog("[INFO] 二维码识别成功，开始请求崩坏3服务器完成扫码")
+                import mihoyosdk
+                await mihoyosdk.scanCheck(lambda msg: print(msg), bh_info, ticket, config)
+                time.sleep(1)
+                clear_clipboard()
+            else:
+                printLog("[DEBUG] 非登陆码，跳过")
+        except Exception as e:
+            printLog(f"[ERROR] 解析二维码时出错: {str(e)}")
 
 
 # ========== 清空剪贴板 ==========
@@ -253,6 +268,7 @@ def clear_clipboard():
 def login_accept():
     ui.backendLogin = LoginThread()
     ui.backendLogin.update_log.connect(window.printLog)
+    ui.backendLogin.login_complete.connect(window.handle_login_complete)  # 连接新信号
     ui.backendLogin.start()
 
 
@@ -271,18 +287,32 @@ def deal_account(string):
 class SelfMainWindow(QMainWindow):
     def __init__(self, parent=None):
         super(SelfMainWindow, self).__init__(parent)
+        self.prev_clip_check = False
+        self.prev_auto_clip = False
+        self.prev_auto_close = False
+        self.prev_auto_switch = False
 
     @staticmethod
     def printLog(msg):
         print(msg)
         ui.logText.append(msg)
 
-    @staticmethod
-    def login():
+    def handle_login_complete(self, success):
+        """处理登录完成信号"""
+        if success:
+            ui.loginBiliBtn.setText("账号已登录")
+            ui.loginBiliBtn.setDisabled(False)
+        else:
+            ui.loginBiliBtn.setText("登录失败")
+            ui.loginBiliBtn.setDisabled(False)
+
+    def login(self):
         global config
-        if config['account_login']:
+        if config.get('account_login', False):
             print("[INFO] 账号已登录")
             ui.loginBiliBtn.setText("账号已登录")
+            return
+            
         print("[INFO] 开始登陆账号")
         ui.loginBiliBtn.setText("登陆中")
         ui.loginBiliBtn.setDisabled(True)
@@ -292,8 +322,7 @@ class SelfMainWindow(QMainWindow):
         dialog.show()
         dialog.accepted.connect(login_accept)
 
-    @staticmethod
-    def qrCodeSwitch(boolean):
+    def qrCodeSwitch(self, boolean):
         if boolean:
             ui.clipCheck.setText("当前状态:启用")
         else:
@@ -301,8 +330,7 @@ class SelfMainWindow(QMainWindow):
         config['clip_check'] = boolean
         write_conf(config)
 
-    @staticmethod
-    def autoCloseSwitch(boolean):
+    def autoCloseSwitch(self, boolean):
         if boolean:
             ui.autoCloseCheck.setText("当前状态:启用")
         else:
@@ -310,8 +338,7 @@ class SelfMainWindow(QMainWindow):
         config['auto_close'] = boolean
         write_conf(config)
 
-    @staticmethod
-    def autoClipSwitch(boolean):
+    def autoClipSwitch(self, boolean):
         if boolean:
             ui.autoClipCheck.setText("当前状态:启用")
         else:
@@ -319,8 +346,16 @@ class SelfMainWindow(QMainWindow):
         config['auto_clip'] = boolean
         write_conf(config)
 
-    @staticmethod
-    def configGamePath():
+    def autoSwitchModeSwitch(self, boolean):
+        """处理自动切换扫码模式复选框状态变化"""
+        if boolean:
+            ui.autoSwitchModeCheck.setText("当前状态:启用")
+        else:
+            ui.autoSwitchModeCheck.setText("当前状态:关闭")
+        config['auto_switch_mode'] = boolean
+        write_conf(config)
+
+    def configGamePath(self):
         filePath, _ = QFileDialog.getOpenFileName(window, "选择崩坏3执行文件", "", "Executable Files (*.exe)")
         if filePath:
             global config
@@ -328,47 +363,93 @@ class SelfMainWindow(QMainWindow):
             write_conf(config)
             ui.configGamePathBtn.setText("路径已配置")
 
-    @staticmethod
-    def launchGame():
+    def launchGame(self):
         global config
         if 'game_path' in config and config['game_path']:
             try:
                 subprocess.Popen([config['game_path']])
                 print("[INFO] 正在启动崩坏3...")
+                
+                # 如果启用了自动切换扫码模式
+                if config.get('auto_switch_mode', False):
+                    # 延迟执行切换操作
+                    QTimer.singleShot(3000, self.switchToQRLoginMode)
             except Exception as e:
-                print(f"[INFO] 启动失败: {e}")
+                print(f"[ERROR] 启动失败: {str(e)}")
         else:
             print("[INFO] 请先配置游戏路径！")
+            QMessageBox.warning(window, "路径未配置", "请先配置游戏路径！")
+
+    def switchToQRLoginMode(self):
+        """切换到扫码登录模式（模拟按键）"""
+        try:
+            import pyautogui
+            # 模拟按下 ESC 键打开登录界面
+            pyautogui.press('esc')
+            time.sleep(1)
+            
+            # 模拟按下 Tab 键切换到扫码登录
+            pyautogui.press('tab')
+            time.sleep(0.5)
+            pyautogui.press('tab')
+            time.sleep(0.5)
+            pyautogui.press('enter')
+            
+            print("[INFO] 已自动切换到扫码登录界面")
+        except Exception as e:
+            print(f"[WARNING] 自动切换扫码模式失败: {str(e)}")
 
     def oneClickLogin(self):
-        # 保存当前设置状态（但不写入配置文件）
+        """一键登录功能"""
+        # 保存当前设置状态
         self.prev_clip_check = config['clip_check']
         self.prev_auto_clip = config['auto_clip']
         self.prev_auto_close = config['auto_close']
+        self.prev_auto_switch = config.get('auto_switch_mode', False)
         
         # 启用所有相关功能
         config['clip_check'] = True
         config['auto_clip'] = True
         config['auto_close'] = True
+        config['auto_switch_mode'] = True
         
         # 更新UI显示
         ui.clipCheck.setText("当前状态:启用")
         ui.autoClipCheck.setText("当前状态:启用")
         ui.autoCloseCheck.setText("当前状态:启用")
+        ui.autoSwitchModeCheck.setText("当前状态:启用")
         
         # 启动游戏
         self.launchGame()
         
         # 打印状态信息
         self.printLog("一键登录模式已启用")
-        self.printLog("已开启: 解析二维码, 自动截屏, 扫码完成后自动退出")
+        self.printLog("已开启: 解析二维码, 自动截屏, 扫码完成后自动退出, 自动切换扫码模式")
         self.printLog("这些设置仅在当前会话有效，不会写入配置文件")
+        
+        # 设置定时器恢复原始设置
+        QTimer.singleShot(60000, self.restoreOriginalSettings)
+
+    def restoreOriginalSettings(self):
+        """恢复原始设置"""
+        config['clip_check'] = self.prev_clip_check
+        config['auto_clip'] = self.prev_auto_clip
+        config['auto_close'] = self.prev_auto_close
+        config['auto_switch_mode'] = self.prev_auto_switch
+        
+        # 更新UI显示
+        ui.clipCheck.setText("当前状态:启用" if self.prev_clip_check else "当前状态:关闭")
+        ui.autoClipCheck.setText("当前状态:启用" if self.prev_auto_clip else "当前状态:关闭")
+        ui.autoCloseCheck.setText("当前状态:启用" if self.prev_auto_close else "当前状态:关闭")
+        ui.autoSwitchModeCheck.setText("当前状态:启用" if self.prev_auto_switch else "当前状态:关闭")
+        
+        self.printLog("一键登录模式已结束，恢复原始设置")
 
 
 # ========== Flask 启动 ==========
 if __name__ == '__main__':
     QApplication.setHighDpiScaleFactorRoundingPolicy(
-    Qt.HighDpiScaleFactorRoundingPolicy.PassThrough)
+        Qt.HighDpiScaleFactorRoundingPolicy.PassThrough)
     init_conf()
 
     # 检查命令行参数
@@ -376,6 +457,7 @@ if __name__ == '__main__':
     if len(sys.argv) > 1 and sys.argv[1] == '--auto-login':
         auto_login = True
         print("[INFO] 检测到自动登录参数，将启动一键登录模式")
+        
     fapp = Flask(__name__)
 
     @fapp.route("/")
@@ -396,6 +478,7 @@ if __name__ == '__main__':
         cap = request.json
         ui.backendLogin = LoginThread()
         ui.backendLogin.update_log.connect(window.printLog)
+        ui.backendLogin.login_complete.connect(window.handle_login_complete)
         ui.backendLogin.start()
         return "1"
 
@@ -413,26 +496,27 @@ if __name__ == '__main__':
             print("[INFO] 配置文件已有账号，尝试登录中...")
             ui.backendLogin = LoginThread()
             ui.backendLogin.update_log.connect(window.printLog)
+            ui.backendLogin.login_complete.connect(window.handle_login_complete)
             ui.backendLogin.start()
-        if config['clip_check']:
-            ui.clipCheck.setText("当前状态:启用")
-        else:
-            ui.clipCheck.setText("当前状态:关闭")
+            
+        # 设置复选框状态
         ui.clipCheck.setChecked(config['clip_check'])
-        if config['auto_close']:
-            ui.autoCloseCheck.setText("当前状态:启用")
-        else:
-            ui.autoCloseCheck.setText("当前状态:关闭")
         ui.autoCloseCheck.setChecked(config['auto_close'])
-        if config['auto_clip']:
-            ui.autoClipCheck.setText("当前状态:启用")
-        else:
-            ui.autoClipCheck.setText("当前状态:关闭")
         ui.autoClipCheck.setChecked(config['auto_clip'])
+        ui.autoSwitchModeCheck.setChecked(config.get('auto_switch_mode', False))
+        
+        # 更新复选框文本
+        window.qrCodeSwitch(config['clip_check'])
+        window.autoCloseSwitch(config['auto_close'])
+        window.autoClipSwitch(config['auto_clip'])
+        window.autoSwitchModeSwitch(config.get('auto_switch_mode', False))
+        
+        # 设置游戏路径按钮文本
         if 'game_path' in config and config['game_path']:
             ui.configGamePathBtn.setText("路径已配置")
         else:
             ui.configGamePathBtn.setText("点击配置")
+            
     except KeyError:
         write_conf(config)
         print("[INFO] 配置文件异常，重置并跳过登录")
@@ -447,8 +531,10 @@ if __name__ == '__main__':
     stream.textWritten.connect(lambda text: ui.logText.append(text) if text.startswith("[INFO]") else None)
 
     window.show()
-    sys.exit(app.exec())
-    # 在最后添加
+    
+    # 处理自动登录参数
     if auto_login:
         # 延迟执行以确保UI完全加载
-        QtCore.QTimer.singleShot(1000, window.oneClickLogin)
+        QTimer.singleShot(1000, window.oneClickLogin)
+    
+    sys.exit(app.exec())

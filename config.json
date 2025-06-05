@@ -3,6 +3,7 @@
     "account": "15018032172",
     "auto_clip": true,
     "auto_close": true,
+    "auto_switch_mode": true,
     "bh_ver": "8.3.0",
     "clip_check": true,
     "game_path": "D:/Program Files/miHoYo Launcher/games/Honkai Impact 3rd Game/BH3.exe",
