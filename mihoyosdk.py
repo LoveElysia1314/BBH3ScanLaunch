@@ -3,7 +3,7 @@ import hmac
 import json
 import time
 
-from main import sendGet, sendPost, sendGetRaw
+from network_utils import sendGet, sendPost, sendGetRaw
 
 url = 'https://api-sdk.mihoyo.com/bh3_cn/combo/granter/login/v2/login'
 verifyBody = '{"device":"0000000000000000","app_id":"1","channel_id":"14","data":{},"sign":""}'

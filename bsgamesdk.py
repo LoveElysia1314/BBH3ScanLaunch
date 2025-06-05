@@ -1,14 +1,12 @@
-## using https://github.com/cc004/pcrjjc2/blob/main/bsgamesdk.py
-
 import hashlib
 import json
 import time
 import urllib
 
 import rsacr
-from main import sendBiliPost
+from network_utils import sendBiliPost
 
-bililogin = "https://line1-sdk-center-login-sh.biligame.net/"
+bililogin = "https://line1-sdk-center-login-sh.biligame.net/" 
 
 def setSign(data):
     data["timestamp"] = int(time.time())
@@ -26,6 +24,7 @@ def setSign(data):
     sign = hashlib.md5(sign.encode()).hexdigest()
     data2 += "sign=" + sign
     return data2
+
 
 userinfoParam = '{"cur_buvid":"XZA2FA4AC240F665E2F27F603ABF98C615C29","client_timestamp":"1667057013442","sdk_type":"1","isRoot":"0","merchant_id":"590","dp":"1280*720","mac":"08:00:27:53:DD:12","uid":"437470182","support_abis":"x86,armeabi-v7a,armeabi","apk_sign":"4502a02a00395dec05a4134ad593224d","platform_type":"3","old_buvid":"XZA2FA4AC240F665E2F27F603ABF98C615C29","operators":"5","fingerprint":"","model":"MuMu","udid":"XXA31CBAB6CBA63E432E087B58411A213BFB7","net":"5","app_id":"180","brand":"Android","oaid":"","game_id":"180","timestamp":"1667057013275","ver":"6.1.0","c":"1","version_code":"510","server_id":"378","version":"1","domain_switch_count":"0","pf_ver":"12","access_key":"","domain":"line1-sdk-center-login-sh.biligame.net","original_domain":"","imei":"","sdk_log_type":"1","sdk_ver":"3.4.2","android_id":"84567e2dda72d1d4","channel_id":1}'
 rsaParam = '{"operators":"5","merchant_id":"590","isRoot":"0","domain_switch_count":"0","sdk_type":"1",' \
@@ -60,12 +59,14 @@ captchaParam = '{"operators":"5","merchant_id":"590","isRoot":"0","domain_switch
               '"client_timestamp":"1613035487431","channel_id":"1","uid":"","game_id":"180","ver":"6.1.0",' \
               '"model":"MuMu"} '
 
-async def getUserInfo(uid,access_key):
+
+async def getUserInfo(uid, access_key):
     data = json.loads(userinfoParam)
     data['uid'] = uid
     data['access_key'] = access_key
     data = setSign(data)
-    return await sendBiliPost(bililogin+ '/api/client/user.info', data)
+    return await sendBiliPost(bililogin + '/api/client/user.info', data)
+
 
 async def login1(account, password):
     data = json.loads(rsaParam)
@@ -81,6 +82,7 @@ async def login1(account, password):
     data["validate"] = ""
     data["pwd"] = rsacr.rsacreate(rsa['hash'] + password, public_key)
     data = setSign(data)
+    print("[DEBUG] 正在尝试登录B站账号: " + account)
     return await sendBiliPost(bililogin + "api/client/login", data)
 
 
@@ -99,6 +101,7 @@ async def login2(account, password, challenge, gt_user, validate):
     data["seccode"] = validate + "|jordan"
     data["pwd"] = rsacr.rsacreate(rsa['hash'] + password, public_key)
     data = setSign(data)
+    print("[DEBUG] 正在尝试二次登录B站账号: " + account)
     return await sendBiliPost(bililogin + "api/client/login", data)
 
 
@@ -107,30 +110,22 @@ async def captcha():
     data = setSign(data)
     return await sendBiliPost(bililogin + "api/client/start_captcha", data)
 
-def make_captch(gt,challenge,gt_user):
-    capurl=f"http://127.0.0.1:12983/?captcha_type=1&challenge={challenge}&gt={gt}&userid={gt_user}&gs=1"
-    print(capurl)
+
+def make_captch(gt, challenge, gt_user):
+    capurl = f"http://127.0.0.1:12983/?captcha_type=1&challenge={challenge}&gt={gt}&userid={gt_user}&gs=1"
+    print("[INFO] 验证码链接生成: " + capurl)
     return capurl
 
-async def login(bili_account, bili_pwd,cap=None):
-    print(f'logging in with acc={bili_account}')
-    print(cap)
+
+async def login(bili_account, bili_pwd, cap=None):
+    print("[DEBUG] 正在尝试登录B站账号: " + bili_account)
     if cap is not None:
-        login_sta = await login2(bili_account,bili_pwd,cap['challenge'],cap['userid'],cap['validate'])
+        login_sta = await login2(bili_account, bili_pwd, cap['challenge'], cap['userid'], cap['validate'])
     else:
         login_sta = await login1(bili_account, bili_pwd)
     if "access_key" not in login_sta:
         cap_data = await captcha()
-        login_sta['cap_url'] = make_captch(cap_data['gt'],cap_data['challenge'],cap_data['gt_user_id'])
-        print('登录失败，可能需要验证码，请联系开发者补充代码')
-        print(login_sta)
+        login_sta['cap_url'] = make_captch(cap_data['gt'], cap_data['challenge'], cap_data['gt_user_id'])
+        print("[INFO] 登录失败，可能需要验证码")
+        print("[DEBUG] 登录状态: " + str(login_sta))
     return login_sta
-
-
-# async def captchaVerifier(gt, challenge, userid):
-#     url = f"https://help.tencentbot.top/geetest/?captcha_type=1&challenge={challenge}&gt={gt}&userid={userid}&gs=1"
-#     print(f'账号登录需要验证码，请完成以下链接中的验证内容后将第一行validate=后面的内容复制，并用指令/pcrval xxxx将内容发送给机器人完成验证\n验证链接：{url}')
-#     validating = True
-#     await captcha_lck.acquire()
-#     validating = False
-#     return validate
