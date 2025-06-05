@@ -4,8 +4,7 @@ from PyQt5 import QtCore, QtGui, QtWidgets
 from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import (QDialog, QDialogButtonBox, QLabel, QLineEdit,
                              QVBoxLayout, QFileDialog)
-import os
-import subprocess
+
 
 
 class LoginDialog(QDialog):
@@ -60,8 +59,6 @@ class Ui_MainWindow(object):
     def setupUi(self, MainWindow):
         MainWindow.setObjectName("MainWindow")
         MainWindow.resize(1200, 1200)  # 增加窗口大小
-        MainWindow.setMinimumSize(QtCore.QSize(1200, 1200))
-        MainWindow.setMaximumSize(QtCore.QSize(1200, 1200))
 
         self.centralwidget = QtWidgets.QWidget(MainWindow)
         self.centralwidget.setObjectName("centralwidget")
@@ -144,8 +141,8 @@ class Ui_MainWindow(object):
             3. 启用解析二维码功能后，会读取剪贴板内二维码<br>
             4. 如果为崩坏3登录二维码则执行扫码<br>
             5. 自动截屏仅在崩坏3为焦点窗口时可用<br>
-            6. 使用"一键登陆崩坏3"需要配置游戏路径，请选择"BH3.exe"而不是其他程序;参考路径：米哈游启动器安装路径\\miHoYo Launcher\\games\\Honkai Impact 3rd Game\\BH3.exe<br>
-            &nbsp;&nbsp;&nbsp;&nbsp;或：崩坏3安装路径\\Game\\BH3.exe
+            6. 使用"一键登陆崩坏3"需要配置游戏路径，请选择"BH3.exe"而不是其他程序
+            7. “BH3.exe”参考路径：米哈游启动器安装路径\\miHoYo Launcher\\games\\Honkai Impact 3rd Game\\BH3.exe
         """)
         aboutLayout.addWidget(self.helpLabel)
 
