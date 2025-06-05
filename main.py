@@ -340,12 +340,42 @@ class SelfMainWindow(QMainWindow):
         else:
             print("[INFO] 请先配置游戏路径！")
 
+    def oneClickLogin(self):
+        # 保存当前设置状态（但不写入配置文件）
+        self.prev_clip_check = config['clip_check']
+        self.prev_auto_clip = config['auto_clip']
+        self.prev_auto_close = config['auto_close']
+        
+        # 启用所有相关功能
+        config['clip_check'] = True
+        config['auto_clip'] = True
+        config['auto_close'] = True
+        
+        # 更新UI显示
+        ui.clipCheck.setText("当前状态:启用")
+        ui.autoClipCheck.setText("当前状态:启用")
+        ui.autoCloseCheck.setText("当前状态:启用")
+        
+        # 启动游戏
+        self.launchGame()
+        
+        # 打印状态信息
+        self.printLog("一键登录模式已启用")
+        self.printLog("已开启: 解析二维码, 自动截屏, 扫码完成后自动退出")
+        self.printLog("这些设置仅在当前会话有效，不会写入配置文件")
+
 
 # ========== Flask 启动 ==========
 if __name__ == '__main__':
     QApplication.setHighDpiScaleFactorRoundingPolicy(
     Qt.HighDpiScaleFactorRoundingPolicy.PassThrough)
     init_conf()
+
+    # 检查命令行参数
+    auto_login = False
+    if len(sys.argv) > 1 and sys.argv[1] == '--auto-login':
+        auto_login = True
+        print("[INFO] 检测到自动登录参数，将启动一键登录模式")
     fapp = Flask(__name__)
 
     @fapp.route("/")
@@ -418,3 +448,7 @@ if __name__ == '__main__':
 
     window.show()
     sys.exit(app.exec())
+    # 在最后添加
+    if auto_login:
+        # 延迟执行以确保UI完全加载
+        QtCore.QTimer.singleShot(1000, window.oneClickLogin)
