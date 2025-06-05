@@ -62,7 +62,7 @@ def init_conf():
                     write_conf(config)
                     continue
         except JSONDecodeError:
-            print('[DEBUG] 配置文件格式不正确 重新写入中...')
+            print('[INFO] 配置文件格式不正确 重新写入中...')
             write_conf()
             continue
         conf_loop = False
@@ -116,12 +116,12 @@ class LoginThread(QThread):
                 bs_info = await bsgamesdk.login(config['account'], config['password'], cap)
                 if "access_key" not in bs_info:
                     if 'need_captch' in bs_info:
-                        print("[DEBUG] 需要验证码！请打开下方网址进行操作！")
-                        print("[DEBUG]" + bs_info['cap_url'])
+                        print("[INFO] 需要验证码！请打开下方网址进行操作！")
+                        print("[INFO]" + bs_info['cap_url'])
                         webbrowser.open_new(bs_info['cap_url'])
                     else:
-                        print("[DEBUG] 登录失败！")
-                        print("[DEBUG]" + str(bs_info))
+                        print("[INFO] 登录失败！")
+                        print("[INFO]" + str(bs_info))
                     ui.loginBiliBtn.setText("登陆账号")
                     ui.loginBiliBtn.setDisabled(False)
                     return
@@ -137,21 +137,21 @@ class LoginThread(QThread):
             bs_info = await bsgamesdk.login(config['account'], config['password'], cap)
             if "access_key" not in bs_info:
                 if 'message' in bs_info:
-                    print("[DEBUG] 登录失败！")
+                    print("[INFO] 登录失败！")
                     if bs_info['message'] == 'PWD_INVALID':
-                        print("[DEBUG] 账号或密码错误！")
+                        print("[INFO] 账号或密码错误！")
                         ui.loginBiliBtn.setText("登陆账号")
                         ui.loginBiliBtn.setDisabled(False)
                         return
                     else:
-                        print("[DEBUG] 原始返回：" + bs_info['message'])
+                        print("[INFO] 原始返回：" + bs_info['message'])
                 if 'need_captch' in bs_info:
-                    print("[DEBUG] 需要验证码！请打开下方网址进行操作！")
-                    print("[DEBUG]" + bs_info['cap_url'])
+                    print("[INFO] 需要验证码！请打开下方网址进行操作！")
+                    print("[INFO]" + bs_info['cap_url'])
                     webbrowser.open_new(bs_info['cap_url'])
                 else:
-                    print("[DEBUG] 登录失败！")
-                    print("[DEBUG]" + str(bs_info))
+                    print("[INFO] 登录失败！")
+                    print("[INFO]" + str(bs_info))
                 ui.loginBiliBtn.setText("登陆账号")
                 ui.loginBiliBtn.setDisabled(False)
                 return
@@ -166,8 +166,8 @@ class LoginThread(QThread):
         import mihoyosdk
         bh_info = await mihoyosdk.verify(bs_info['uid'], bs_info['access_key'])
         if bh_info['retcode'] != 0:
-            print("[DEBUG] 登录失败！")
-            print("[DEBUG]" + str(bh_info))
+            print("[INFO] 登录失败！")
+            print("[INFO]" + str(bh_info))
             return
         print("[INFO] 登录成功！")
         print("[INFO] 获取OA服务器信息中...")
@@ -177,7 +177,7 @@ class LoginThread(QThread):
         print(f"[INFO] 当前崩坏3版本: {bh_ver}")
         oa = await mihoyosdk.getOAServer(config['oa_token'])
         if len(oa) < 100:
-            print("[DEBUG] 获取OA服务器失败！请检查Token后重试")
+            print("[INFO] 获取OA服务器失败！请检查Token后重试")
             return
         print("[INFO] 获取OA服务器成功！")
         ui.loginBiliBtn.setText("账号已登录")
@@ -336,9 +336,9 @@ class SelfMainWindow(QMainWindow):
                 subprocess.Popen([config['game_path']])
                 print("[INFO] 正在启动崩坏3...")
             except Exception as e:
-                print(f"[DEBUG] 启动失败: {e}")
+                print(f"[INFO] 启动失败: {e}")
         else:
-            print("[DEBUG] 请先配置游戏路径！")
+            print("[INFO] 请先配置游戏路径！")
 
 
 # ========== Flask 启动 ==========
@@ -359,9 +359,9 @@ if __name__ == '__main__':
     @fapp.route('/ret', methods=["GET", "POST"])
     def ret():
         if not request.json:
-            print("[DEBUG] 请求错误")
+            print("[INFO] 请求错误")
             abort(400)
-        print("[DEBUG] Input = " + str(request.json))
+        print("[INFO] Input = " + str(request.json))
         global cap
         cap = request.json
         ui.backendLogin = LoginThread()
@@ -405,7 +405,7 @@ if __name__ == '__main__':
             ui.configGamePathBtn.setText("点击配置")
     except KeyError:
         write_conf(config)
-        print("[DEBUG] 配置文件异常，重置并跳过登录")
+        print("[INFO] 配置文件异常，重置并跳过登录")
 
     ui.backendClipCheck = ParseThread()
     ui.backendClipCheck.update_log.connect(window.printLog)
