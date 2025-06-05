@@ -1,140 +1,209 @@
 # -*- coding: utf-8 -*-
-
-from PyQt5 import QtCore, QtGui, QtWidgets
-from PyQt5.QtCore import Qt
-from PyQt5.QtWidgets import (QDialog, QDialogButtonBox, QLabel, QLineEdit,
-                             QVBoxLayout, QFileDialog)
-
-
+from PyQt6 import QtCore, QtGui, QtWidgets
+from PyQt6.QtCore import Qt
+from PyQt6.QtWidgets import (QDialog, QDialogButtonBox, QLabel, QLineEdit,
+                             QVBoxLayout, QHBoxLayout, QTextBrowser, QGridLayout)
 
 class LoginDialog(QDialog):
     def __init__(self, parent=None):
         super(LoginDialog, self).__init__(parent)
         self.setWindowTitle('登录账号')
-        # 设置对话框固定大小
-        self.setFixedSize(400, 300)
         
-        # 设置字体大小
-        font = QtGui.QFont()
-        font.setPointSize(12)
+        # 使用垂直布局并启用自动大小调整
+        main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(16, 16, 16, 16)  # 设置合理的边距
         
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(20, 20, 20, 20)  # 增加边距
+        # 创建表单布局（垂直布局）
+        form_layout = QVBoxLayout()
+        form_layout.setSpacing(12)  # 控制行间距
 
-        self.label1 = QLabel(self)
-        self.label1.setText('账号')
-        self.label1.setFont(font)
+        # 账号行
+        account_row = QHBoxLayout()
+        self.account = QLineEdit()
+        self.account.setPlaceholderText("请输入账号")
+        self.account.setMinimumHeight(30)
+        account_row.addWidget(QLabel("账号:"), alignment=Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        account_row.addWidget(self.account)
+        account_row.setSpacing(12)
 
-        self.label2 = QLabel(self)
-        self.label2.setText('密码')
-        self.label2.setFont(font)
+        # 密码行
+        password_row = QHBoxLayout()
+        self.password = QLineEdit()
+        self.password.setPlaceholderText("请输入密码")
+        self.password.setEchoMode(QLineEdit.EchoMode.Password)
+        self.password.setMinimumHeight(30)
+        password_row.addWidget(QLabel("密码:"), alignment=Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        password_row.addWidget(self.password)
+        password_row.setSpacing(12)
 
-        self.account = QLineEdit(self)
-        self.account.setEchoMode(QLineEdit.Normal)
-        self.account.setFont(font)
-        self.account.setMinimumHeight(35)  # 增加输入框高度
+        # 将每行加入到表单布局中
+        form_layout.addLayout(account_row)
+        form_layout.addLayout(password_row)
 
-        self.password = QLineEdit(self)
-        self.password.setEchoMode(QLineEdit.Password)
-        self.password.setFont(font)
-        self.password.setMinimumHeight(35)  # 增加输入框高度
-
-        layout.addWidget(self.label1)
-        layout.addWidget(self.account)
-        layout.addSpacing(15)  # 增加间距
-        layout.addWidget(self.label2)
-        layout.addWidget(self.password)
-
+        # 添加到主布局
+        main_layout.addLayout(form_layout)
+        
+        # 按钮框
         buttons = QDialogButtonBox(
-            QDialogButtonBox.Ok | QDialogButtonBox.Cancel,
-            Qt.Horizontal, self)
-        buttons.setFont(font)
+            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
+        )
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
-        layout.addSpacing(15)  # 增加间距
-        layout.addWidget(buttons)
+        main_layout.addWidget(buttons, alignment=Qt.AlignmentFlag.AlignCenter)
+        
+        # 自动调整窗口大小
+        self.adjustSize()
 
-
-class Ui_MainWindow(object):
+class Ui_MainWindow:
     def setupUi(self, MainWindow):
         MainWindow.setObjectName("MainWindow")
-        MainWindow.resize(1200, 1200)  # 增加窗口大小
-
+        MainWindow.setAttribute(Qt.WidgetAttribute.WA_Resized, True)
+        
         self.centralwidget = QtWidgets.QWidget(MainWindow)
         self.centralwidget.setObjectName("centralwidget")
-
-        # 主布局 - 水平布局
+        
+        # 主水平布局
         self.mainLayout = QtWidgets.QHBoxLayout(self.centralwidget)
-
+        self.mainLayout.setSpacing(15)  # 全局控件间距
+        self.mainLayout.setContentsMargins(15, 15, 15, 15)  # 设置合理边距
+        
         # 左侧日志区域
-        self.logGroup = QtWidgets.QGroupBox("运行日志", self.centralwidget)
-        self.logText = QtWidgets.QTextBrowser()
-        self.logText.setObjectName("logText")
-
+        self.logGroup = QtWidgets.QGroupBox("运行日志")
         logLayout = QtWidgets.QVBoxLayout(self.logGroup)
+        logLayout.setContentsMargins(10, 15, 10, 10)
+        
+        self.logText = QTextBrowser()
+        self.logText.setOpenExternalLinks(True)
         logLayout.addWidget(self.logText)
-        self.mainLayout.addWidget(self.logGroup, stretch=3)  # 左侧占3份空间
-
+        
         # 右侧控制区域
-        self.controlGroup = QtWidgets.QGroupBox("控制面板", self.centralwidget)
+        self.controlGroup = QtWidgets.QGroupBox("控制面板")
         controlLayout = QtWidgets.QVBoxLayout(self.controlGroup)
+        controlLayout.setSpacing(15)
+        controlLayout.setContentsMargins(12, 15, 12, 12)
+        
+        # 创建各功能模块（注意顺序调整）
+        self.create_account_group(controlLayout)
+        self.create_auto_login_group(controlLayout)  # 新增的自动登录组
+        self.create_features_group(controlLayout)
+        self.create_about_group(controlLayout)
+        
+        # 弹性空间分配
+        self.mainLayout.addWidget(self.logGroup, 3)  # 日志区域占更多空间
+        self.mainLayout.addWidget(self.controlGroup, 2)
+        
+        MainWindow.setCentralWidget(self.centralwidget)
+        
+        # 菜单栏
+        self.menubar = QtWidgets.QMenuBar(MainWindow)
+        MainWindow.setMenuBar(self.menubar)
+        
+        self.retranslateUi(MainWindow)
+        self.connectSignals(MainWindow)
+        QtCore.QMetaObject.connectSlotsByName(MainWindow)
 
-        # 账号设置分组
+    def create_account_group(self, layout):
+        """创建账号设置组"""
         self.accountGroup = QtWidgets.QGroupBox("账号设置")
-        accountLayout = QtWidgets.QFormLayout(self.accountGroup)
-
-        self.label = QtWidgets.QLabel("登录B站账户:")
+        accountLayout = QtWidgets.QVBoxLayout(self.accountGroup)
+        accountLayout.setContentsMargins(10, 10, 10, 10)
+        
         self.loginBiliBtn = QtWidgets.QPushButton("点击登录")
-        self.loginBiliBtn.setMaximumSize(QtCore.QSize(200, 16777215))
-        accountLayout.addRow(self.label, self.loginBiliBtn)
-
-        # 新增：配置游戏路径
-        self.gamePathLabel = QtWidgets.QLabel("配置游戏路径:")
         self.configGamePathBtn = QtWidgets.QPushButton("点击配置")
-        self.configGamePathBtn.setMaximumSize(QtCore.QSize(200, 16777215))
-        # 将按钮和状态标签放在一个水平布局中
-        gamePathLayout = QtWidgets.QHBoxLayout()
-        gamePathLayout.addWidget(self.configGamePathBtn)
-        accountLayout.addRow(self.gamePathLabel, gamePathLayout)
+        
+        accountLayout.addWidget(self.create_labeled_widget("登录B站账户:", self.loginBiliBtn))
+        accountLayout.addWidget(self.create_labeled_widget("配置游戏路径:", self.configGamePathBtn))
+        
+        layout.addWidget(self.accountGroup)
 
-        # 新增：一键登录崩坏3按钮
-        self.oneClickLoginLabel = QtWidgets.QLabel("一键登录崩坏3:")
-        self.oneClickLoginBtn = QtWidgets.QPushButton("启动游戏")
-        self.oneClickLoginBtn.setMaximumSize(QtCore.QSize(200, 16777215))
-        accountLayout.addRow(self.oneClickLoginLabel, self.oneClickLoginBtn)
+    def create_auto_login_group(self, layout):
+        """创建自动化组"""
+        self.autoLoginGroup = QtWidgets.QGroupBox("自动化")
+        autoLoginLayout = QVBoxLayout(self.autoLoginGroup)
+        autoLoginLayout.setContentsMargins(10, 10, 10, 10)
+        
+        # 保留原有接口名称，仅修改显示文本
+        self.oneClickLoginBtn = QtWidgets.QPushButton("一键进入崩坏3")
+        autoLoginLayout.addWidget(self.oneClickLoginBtn)
+        
+        layout.addWidget(self.autoLoginGroup)
 
-        controlLayout.addWidget(self.accountGroup)
-
-        # 功能设置分组
+    def create_features_group(self, layout):
+        """创建功能设置组 - 使用网格布局对齐复选框"""
         self.featureGroup = QtWidgets.QGroupBox("功能设置")
-        featureLayout = QtWidgets.QFormLayout(self.featureGroup)
+        gridLayout = QtWidgets.QGridLayout(self.featureGroup)
+        gridLayout.setContentsMargins(10, 12, 10, 12)
+        gridLayout.setHorizontalSpacing(10)
+        gridLayout.setVerticalSpacing(8)
+        
+        # 第一列标签右对齐，第二列复选框左对齐
+        row = 0
+        
+        # 解析二维码
+        qr_label = QtWidgets.QLabel("解析二维码:")
+        self.clipCheck = QtWidgets.QCheckBox()
+        gridLayout.addWidget(qr_label, row, 0, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        gridLayout.addWidget(self.clipCheck, row, 1, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+        row += 1
 
-        self.label_2 = QtWidgets.QLabel("解析二维码:")
-        self.clipCheck = QtWidgets.QCheckBox("当前状态:关闭")
-        featureLayout.addRow(self.label_2, self.clipCheck)
+        # 自动尝试截屏
+        auto_clip_label = QtWidgets.QLabel("自动尝试截屏:")
+        self.autoClipCheck = QtWidgets.QCheckBox()
+        gridLayout.addWidget(auto_clip_label, row, 0, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        gridLayout.addWidget(self.autoClipCheck, row, 1, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+        row += 1
 
-        self.autoClipLabel = QtWidgets.QLabel("自动尝试截屏:")
-        self.autoClipCheck = QtWidgets.QCheckBox("当前状态:关闭")
-        featureLayout.addRow(self.autoClipLabel, self.autoClipCheck)
+        # 自动退出
+        auto_close_label = QtWidgets.QLabel("扫码完成后自动退出:")
+        self.autoCloseCheck = QtWidgets.QCheckBox()
+        gridLayout.addWidget(auto_close_label, row, 0, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        gridLayout.addWidget(self.autoCloseCheck, row, 1, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
 
-        self.label_4 = QtWidgets.QLabel("扫码完成后自动退出:")
-        self.autoCloseCheck = QtWidgets.QCheckBox("当前状态:关闭")
-        featureLayout.addRow(self.label_4, self.autoCloseCheck)
+        # 设置列拉伸比例
+        gridLayout.setColumnStretch(0, 1)  # 标签列可扩展
+        gridLayout.setColumnStretch(1, 0)  # 复选框列固定宽度
+        
+        layout.addWidget(self.featureGroup)
 
-        controlLayout.addWidget(self.featureGroup)
-
-        # 关于信息
+    def create_about_group(self, layout):
+        """创建关于信息组，高度自适应内容"""
         self.aboutGroup = QtWidgets.QGroupBox("关于")
         aboutLayout = QtWidgets.QVBoxLayout(self.aboutGroup)
+        aboutLayout.setContentsMargins(10, 12, 10, 12)
+        aboutLayout.setSpacing(8)
 
+        # 添加标题
         self.label_3 = QtWidgets.QLabel("Powered By Hao_cen")
-        self.label_3.setAlignment(QtCore.Qt.AlignCenter)
+        self.label_3.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.label_3.setStyleSheet("font-weight: bold;")
         aboutLayout.addWidget(self.label_3)
 
-        # 使用说明
+        # 添加帮助文本
         self.helpLabel = QtWidgets.QLabel()
-        self.helpLabel.setWordWrap(True)
-        self.helpLabel.setText("""
+        self.helpLabel.setWordWrap(True)  # 自动换行
+        self.helpLabel.setText(self.get_help_text())
+        self.helpLabel.setSizePolicy(
+            QtWidgets.QSizePolicy.Policy.Preferred,
+            QtWidgets.QSizePolicy.Policy.Preferred
+        )
+        aboutLayout.addWidget(self.helpLabel, 1)  # 添加拉伸因子
+        
+        layout.addWidget(self.aboutGroup, 1)  # 设置拉伸因子
+
+    def create_labeled_widget(self, label_text, widget):
+        """创建带标签的控件组合"""
+        container = QtWidgets.QWidget()
+        h_layout = QtWidgets.QHBoxLayout(container)
+        h_layout.setContentsMargins(0, 0, 0, 0)
+        
+        label = QtWidgets.QLabel(label_text)
+        h_layout.addWidget(label)
+        h_layout.addWidget(widget, 1)  # 弹性空间分配
+        
+        return container
+
+    def get_help_text(self):
+        return """
             <b>简易使用说明：</b><br>
             1. 第一次使用需要点击登录按钮登录B站账号<br>
             2. 账号密码会储存在配置文件内<br>
@@ -143,34 +212,17 @@ class Ui_MainWindow(object):
             5. 自动截屏仅在崩坏3为焦点窗口时可用<br>
             6. 使用"一键登陆崩坏3"需要配置游戏路径，请选择"BH3.exe"而不是其他程序
             7. “BH3.exe”参考路径：米哈游启动器安装路径\\miHoYo Launcher\\games\\Honkai Impact 3rd Game\\BH3.exe
-        """)
-        aboutLayout.addWidget(self.helpLabel)
-
-        controlLayout.addWidget(self.aboutGroup)
-        controlLayout.addStretch()  # 添加弹性空间
-
-        self.mainLayout.addWidget(self.controlGroup, stretch=2)  # 右侧占2份空间
-
-        MainWindow.setCentralWidget(self.centralwidget)
-
-        # 菜单栏
-        self.menubar = QtWidgets.QMenuBar(MainWindow)
-        self.menubar.setGeometry(QtCore.QRect(0, 0, 800, 30))
-        MainWindow.setMenuBar(self.menubar)
-
-        self.retranslateUi(MainWindow)
-        self.loginBiliBtn.clicked.connect(MainWindow.login)  # type: ignore
-        self.clipCheck.clicked['bool'].connect(MainWindow.qrCodeSwitch)  # type: ignore
-        self.autoCloseCheck.clicked['bool'].connect(MainWindow.autoCloseSwitch)  # type: ignore
-        self.autoClipCheck.clicked['bool'].connect(MainWindow.autoClipSwitch)  # type: ignore
-        # 新增：连接新按钮的信号
-        self.configGamePathBtn.clicked.connect(MainWindow.configGamePath)  # type: ignore
-        self.oneClickLoginBtn.clicked.connect(MainWindow.launchGame)  # type: ignore
-        QtCore.QMetaObject.connectSlotsByName(MainWindow)
+        """
 
     def retranslateUi(self, MainWindow):
         _translate = QtCore.QCoreApplication.translate
         MainWindow.setWindowTitle(_translate("MainWindow", "崩坏3外置扫码器 v.1.4.9"))
-
-        # 初始化日志区域（使用纯文本）
         self.logText.setPlainText("系统初始化完成，等待操作...")
+
+    def connectSignals(self, MainWindow):
+        self.loginBiliBtn.clicked.connect(MainWindow.login)
+        self.clipCheck.clicked.connect(MainWindow.qrCodeSwitch)
+        self.autoCloseCheck.clicked.connect(MainWindow.autoCloseSwitch)
+        self.autoClipCheck.clicked.connect(MainWindow.autoClipSwitch)
+        self.configGamePathBtn.clicked.connect(MainWindow.configGamePath)
+        self.oneClickLoginBtn.clicked.connect(MainWindow.launchGame)

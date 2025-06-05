@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 import sys
 import asyncio
 import json
@@ -6,14 +7,15 @@ import time
 import webbrowser
 from json.decoder import JSONDecodeError
 from threading import Thread
-from PyQt5.QtCore import QThread, pyqtSignal, QObject, Qt
-from PyQt5.QtWidgets import QApplication, QMainWindow, QFileDialog
+from PyQt6.QtCore import QThread, pyqtSignal, QObject, Qt
+from PyQt6.QtWidgets import QApplication, QMainWindow, QFileDialog, QMessageBox
 from PIL import ImageGrab
 from pyzbar.pyzbar import decode
 import subprocess
 import mainWindow
 from flask import Flask, abort, render_template, request
 from PIL import Image, ImageGrab
+
 
 # ========== EmittingStream 类：用于拦截 stdout 输出 ==========
 class EmittingStream(QObject):
@@ -30,6 +32,7 @@ class EmittingStream(QObject):
     def flush(self):
         self.original_stdout.flush()
 
+
 # ========== 全局变量 ==========
 m_cast_group_ip = '239.0.1.255'
 m_cast_group_port = 12585
@@ -37,6 +40,7 @@ bh_info = {}
 config = {}
 data = {}
 cap = None
+
 
 # ========== 初始化配置文件 ==========
 def init_conf():
@@ -65,6 +69,7 @@ def init_conf():
     print("[INFO] 配置文件检查完成")
     config['account_login'] = False
 
+
 # ========== 写入配置文件 ==========
 def write_conf(old=None):
     config_temp = json.loads('{"account":"","password":"","sleep_time":3,"ver":5,'
@@ -82,6 +87,7 @@ def write_conf(old=None):
     with open('./config.json', 'w') as f:
         output = json.dumps(config_temp, sort_keys=True, indent=4, separators=(',', ': '))
         f.write(output)
+
 
 # ========== 登录线程 ==========
 class LoginThread(QThread):
@@ -178,6 +184,7 @@ class LoginThread(QThread):
         config['account_login'] = True
         write_conf(config)
 
+
 # ========== 解析线程 ==========
 class ParseThread(QThread):
     update_log = pyqtSignal(str)
@@ -201,6 +208,7 @@ class ParseThread(QThread):
                     await parse_pic(lambda msg: print(msg))
                 time.sleep(config['sleep_time'])
 
+
 # ========== 图像解析函数 ==========
 async def parse_pic(printLog):
     if config['account_login']:
@@ -209,6 +217,7 @@ async def parse_pic(printLog):
             return await parse_pic_raw(im, printLog)
     else:
         print("[DEBUG] 当前未登录或登陆中，跳过当前图片处理")
+
 
 async def parse_pic_raw(im, printLog):
     if isinstance(im, Image.Image):
@@ -231,6 +240,7 @@ async def parse_pic_raw(im, printLog):
         else:
             printLog("[DEBUG] 非登陆码，跳过")
 
+
 # ========== 清空剪贴板 ==========
 def clear_clipboard():
     from ctypes import windll
@@ -238,20 +248,24 @@ def clear_clipboard():
         windll.user32.EmptyClipboard()
         windll.user32.CloseClipboard()
 
+
 # ========== 登录按钮点击回调 ==========
 def login_accept():
     ui.backendLogin = LoginThread()
     ui.backendLogin.update_log.connect(window.printLog)
     ui.backendLogin.start()
 
+
 # ========== 账号/密码输入回调 ==========
 def deal_password(string):
     global config
     config['password'] = string
 
+
 def deal_account(string):
     global config
     config['account'] = string
+
 
 # ========== 主窗口类 ==========
 class SelfMainWindow(QMainWindow):
@@ -326,8 +340,11 @@ class SelfMainWindow(QMainWindow):
         else:
             print("[DEBUG] 请先配置游戏路径！")
 
+
 # ========== Flask 启动 ==========
 if __name__ == '__main__':
+    QApplication.setHighDpiScaleFactorRoundingPolicy(
+    Qt.HighDpiScaleFactorRoundingPolicy.PassThrough)
     init_conf()
     fapp = Flask(__name__)
 
@@ -400,4 +417,4 @@ if __name__ == '__main__':
     stream.textWritten.connect(lambda text: ui.logText.append(text) if text.startswith("[INFO]") else None)
 
     window.show()
-    sys.exit(app.exec_())
+    sys.exit(app.exec())
