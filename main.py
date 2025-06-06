@@ -210,7 +210,7 @@ class ParseThread(QThread):
                 if config['auto_clip']:
                     try:
                         if is_game_window_active():
-                            screenshot = image_processor.capture_game_window()
+                            screenshot = image_processor.capture_screen()
                             if screenshot is not None:
                                 await image_processor.parse_qr_code(image_source='game_window', config=config, bh_info=bh_info)
                         else:
@@ -325,14 +325,8 @@ class SelfMainWindow(QMainWindow):
             try:
                 subprocess.Popen([config['game_path']])
                 print("[INFO] 正在启动崩坏3...")
-                
-                time.sleep(10)
-                # 等待游戏窗口出现并将其移至前台
-                active_game_window()
-                
-                # 如果启用自动切换模式，则在窗口检测到后切换到二维码登录模式
-                if config.get('auto_switch_mode', False):
-                    QTimer.singleShot(3000, image_processor.switch_to_qr_login_mode)
+                # 使用 QTimer.singleShot 延迟执行 active_game_window
+                QTimer.singleShot(10000, active_game_window)  # 10000 毫秒 = 10 秒
             except Exception as e:
                 print(f"[ERROR] 启动失败: {str(e)}")
         else:
