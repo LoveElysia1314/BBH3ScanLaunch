@@ -198,9 +198,7 @@ class ParseThread(QThread):
             if config['auto_close']:
                 if config['auto_switch_mode']:
                     if is_game_window_exist():
-                        region = image_processor.get_game_window_region()
-                        if region:
-                            image_processor.match_and_click(region=region)
+                        image_processor.match_and_click()
                     else:
                         print("[DEBUG] 崩坏3窗口不存在，跳过图像识别和点击")
                 
