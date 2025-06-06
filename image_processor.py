@@ -34,7 +34,20 @@ def is_game_window_active():
     except Exception as e:
         print(f"[INFO] 检查活动窗口时出错: {e}")
         return False
+
+def is_game_window_exist():
+    """检查所有窗口中是否存在标题全字匹配GAME_WINDOW_TITLE的窗口"""
+    try:
+        all_windows = gw.getAllWindows()
+        for window in all_windows:
+            if window.title == GAME_WINDOW_TITLE:
+                return True
+        return False
     
+    except Exception as e:
+        print(f"[INFO] 检查窗口时出错: {e}")
+        return False
+
 def active_game_window():
     """
     激活指定标题的游戏窗口（如“崩坏3”）。
@@ -155,13 +168,12 @@ class ImageProcessor:
         screen_np = np.array(screenshot)
         return cv2.cvtColor(screen_np, cv2.COLOR_RGB2GRAY)
     
-    def match_template(self, template_name, threshold=0.8, region=None, scales=[1.0]):
+    def match_template(self, template_name, threshold=0.8, region=None):
         """
-        多尺度模板匹配
+        单尺度模板匹配
         :param template_name: 模板文件名
         :param threshold: 匹配阈值
         :param region: 搜索区域
-        :param scales: 缩放尺度列表
         :return: 匹配位置和置信度，或(None, 0)
         """
         if template_name not in self.template_cache:
@@ -171,71 +183,52 @@ class ImageProcessor:
         template = self.template_cache[template_name]
         screen_gray = self.capture_screen(region)
         
-        best_match_val = 0
-        best_match_loc = None
-        best_scale = 1.0
+        # 单次匹配
+        result = cv2.matchTemplate(screen_gray, template, cv2.TM_CCOEFF_NORMED)
+        min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(result)
         
-        # 多尺度匹配
-        for scale in scales:
-            scaled_template = cv2.resize(template, None, fx=scale, fy=scale)
-            if scaled_template.shape[0] > screen_gray.shape[0] or scaled_template.shape[1] > screen_gray.shape[1]:
-                continue
-                
-            result = cv2.matchTemplate(screen_gray, scaled_template, cv2.TM_CCOEFF_NORMED)
-            min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(result)
-            
-            if max_val > best_match_val:
-                best_match_val = max_val
-                best_match_loc = max_loc
-                best_scale = scale
-        
-        if best_match_val >= threshold:
+        if max_val >= threshold:
             # 计算中心位置
-            scaled_template = cv2.resize(template, None, fx=best_scale, fy=best_scale)
-            x = best_match_loc[0] + scaled_template.shape[1] // 2
-            y = best_match_loc[1] + scaled_template.shape[0] // 2
+            x = max_loc[0] + template.shape[1] // 2
+            y = max_loc[1] + template.shape[0] // 2
             
             if region:
                 x += region[0]
                 y += region[1]
                 
-            return (x, y), best_match_val
+            return (x, y), max_val
         
-        return None, best_match_val
-    
-    def match_and_click(self, threshold=0.8, click_offset=(0, 0), region=None, max_attempts=1):
+        return None, max_val
+        
+    def match_and_click(self, threshold=0.8, region=None):
         """
-        遍历当前分辨率对应模板目录下的所有图片，匹配到第一个符合要求的模板后点击并退出。
+        遍历模板目录下的所有图片，点击置信度最高的匹配结果
         
         :param threshold: 匹配阈值
-        :param click_offset: 点击偏移量
         :param region: 搜索区域
-        :param max_attempts: 每个模板的最大匹配尝试次数
         :return: 是否成功点击
         """
-        print("[INFO] 开始尝试匹配当前分辨率下所有模板...")
-
+        best_match = None
+        best_confidence = 0
+        
         # 遍历所有缓存中的模板
         for template_name in self.template_cache:
-            print(f"[INFO] 尝试匹配模板: {template_name}")
-            for attempt in range(max_attempts):
-                location, confidence = self.match_template(template_name, threshold, region)
-                if location:
-                    x, y = location
-                    x += click_offset[0]
-                    y += click_offset[1]
+            location, confidence = self.match_template(template_name, threshold, region)
+            if location and confidence > best_confidence:
+                best_match = (template_name, location, confidence)
+                best_confidence = confidence
 
-                    # 限制点击坐标在屏幕范围内
-                    x = max(0, min(x, self.screen_width - 1))
-                    y = max(0, min(y, self.screen_height - 1))
+        if best_match:
+            template_name, (x, y), confidence = best_match
+            # 限制点击坐标在屏幕范围内
+            x = max(0, min(x, self.screen_width - 1))
+            y = max(0, min(y, self.screen_height - 1))
+            
+            pyautogui.click(x, y)
+            print(f"[INFO] 点击最佳匹配: {template_name} (置信度: {confidence:.2f}) @ ({x}, {y})")
+            return True
 
-                    pyautogui.click(x, y)
-                    print(f"[INFO] 成功匹配模板: {template_name} (置信度: {confidence:.2f}) @ ({x}, {y})")
-                    return True
-                print(f"[INFO] 模板 {template_name} 第 {attempt+1}/{max_attempts} 次匹配失败 (置信度: {confidence:.2f})")
-                time.sleep(0.5)
-
-        print("[INFO] 所有模板均未匹配成功")
+        print("[INFO] 未找到达到阈值的匹配结果")
         return False
 
     async def parse_qr_code(self, image_source='clipboard', config=None, bh_info=None):
@@ -279,7 +272,7 @@ class ImageProcessor:
             if ticket and config and bh_info:
                 print("[INFO] 二维码识别成功，开始请求崩坏3服务器完成扫码")
                 import mihoyosdk
-                await mihoyosdk.scanCheck(lambda msg: print(msg), bh_info, ticket, config)
+                await mihoyosdk.scanCheck(bh_info, ticket, config)
                 time.sleep(1)
                 self.clear_clipboard()
                 return True
