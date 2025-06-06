@@ -6,3 +6,14 @@ Pictures_to_Match/2000p/8000p_1.png
 Pictures_to_Match/2000p/8000p_2.png
 Pictures_to_Match/2000p/8000p_3.png
 *.pyc
+.env
+*.env
+*.log
+*.key
+*.pem
+*.db
+/node_modules
+/dist
+/build
+.DS_Store
+Thumbs.db
