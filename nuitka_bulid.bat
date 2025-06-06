@@ -1,0 +1,1 @@
+nuitka --standalone --onefile --output-filename=BBH3ScanLaunch.exe --windows-icon-from-ico=.\BHimage.ico --windows-disable-console main.py
