@@ -2,6 +2,9 @@ import hashlib
 import hmac
 import json
 import time
+import asyncio
+from PyQt6.QtCore import QTimer
+from PyQt6.QtWidgets import QApplication
 
 from network_utils import sendGet, sendPost, sendGetRaw
 
@@ -49,7 +52,7 @@ async def getBHVer(cache_bh_ver=None):
     if has_bh_ver:
         return local_bh_ver
     feedback = await sendGet('https://api-v2.scanner.hellocraft.xyz/v4/hi3_version', cache_bh_ver)
-    # printLog('云端版本号')
+    # print('[INFO] 云端版本号')
     if feedback == cache_bh_ver:
         local_bh_ver = cache_bh_ver['bh_ver']
         print('获取版本号失败，使用缓存版本号')
@@ -83,7 +86,7 @@ async def getOAServer(oa_token):
     return dispatch
 
 
-async def scanCheck(printLog, bh_info, ticket, config):
+async def scanCheck(bh_info, ticket, config):
     check = json.loads(scanCheckR)
     check['ticket'] = ticket
     check['ts'] = int(time.time())
@@ -91,14 +94,14 @@ async def scanCheck(printLog, bh_info, ticket, config):
     post_body = json.dumps(check).replace(' ', '')
     feedback = await sendPost('https://api-sdk.mihoyo.com/bh3_cn/combo/panda/qrcode/scan', post_body)
     if feedback['retcode'] != 0:
-        printLog('请求错误！可能是二维码已过期')
-        printLog(feedback)
+        print('[INFO] 请求错误！可能是二维码已过期')
+        print("[INFO]", feedback)
         return
     else:
-        await scanConfirm(printLog, bh_info, ticket, config)
+        await scanConfirm(bh_info, ticket, config)
 
 
-async def scanConfirm(printLog, bhinfoR, ticket, config):
+async def scanConfirm(bhinfoR, ticket, config):
     bhinfo = bhinfoR['data']
     # print(bhinfo)
     scan_result = json.loads(scanResultR)
@@ -124,17 +127,19 @@ async def scanConfirm(printLog, bhinfoR, ticket, config):
     # print(post_body)
     feedback = await sendPost('https://api-sdk.mihoyo.com/bh3_cn/combo/panda/qrcode/confirm', post_body)
     if feedback['retcode'] == 0:
-        printLog('扫码成功！')
+        print('[INFO] 扫码成功！')
         if config['auto_close']:
-            printLog('已启用自动退出')
-            printLog('3秒后将自动关闭扫码器')
+            print('[INFO] 已启用自动退出')
+            print('[INFO] 3秒后将自动关闭扫码器')
+            # 使用 QTimer 延迟关闭 GUI（不会阻塞事件循环）
+            QTimer.singleShot(3000, QApplication.instance().quit)
             import sys
-            time.sleep(3)
+            asyncio.sleep(3)
             sys.exit()
 
     else:
-        printLog('扫码失败！')
-        printLog(feedback)
+        print('[INFO] 扫码失败！')
+        print("[INFO]", feedback)
 
 
 async def verify(uid, access_key):
