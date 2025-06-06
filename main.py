@@ -15,11 +15,6 @@ import subprocess
 import mainWindow
 from image_processor import image_processor, is_game_window_active
 from flask import Flask, abort, render_template, request
-import logging
-
-# 配置 logging
-logging.basicConfig(level=logging.DEBUG, format='%(levelname)s: %(message)s')
-logger = logging.getLogger(__name__)
 
 # ========== EmittingStream 类：用于拦截 stdout 输出 ==========
 class EmittingStream(QObject):
@@ -35,6 +30,7 @@ class EmittingStream(QObject):
 
     def flush(self):
         self.original_stdout.flush()
+        
 
 # ========== 全局变量 ==========
 m_cast_group_ip = '239.0.1.255'
@@ -56,19 +52,19 @@ def init_conf():
                 config = json.loads(fp.read())
                 try:
                     if config['ver'] != 6:
-                        logger.info('配置文件已更新，请注意重新修改文件')
+                        print('配置文件已更新，请注意重新修改文件')
                         write_conf(config)
                         continue
                 except KeyError:
-                    logger.info('配置文件已更新，请注意重新修改文件')
+                    print('配置文件已更新，请注意重新修改文件')
                     write_conf(config)
                     continue
         except JSONDecodeError:
-            logger.info('配置文件格式不正确 重新写入中...')
+            print('配置文件格式不正确 重新写入中...')
             write_conf()
             continue
         conf_loop = False
-    logger.info("配置文件检查完成")
+    print("配置文件检查完成")
     config['account_login'] = False
 
 # ========== 写入配置文件 ==========
@@ -99,14 +95,14 @@ class LoginThread(QThread):
 
     async def login(self):
         global config, bh_info, cap
-        logger.info("[INFO] 登录B站账号中...")
+        print("[INFO] 登录B站账号中...")
         try:
             import bsgamesdk
             if config['last_login_succ']:
-                logger.info(f"[INFO] 验证缓存账号 {config['uname']} 中...")
+                print(f"[INFO] 验证缓存账号 {config['uname']} 中...")
                 bs_user_info = await bsgamesdk.getUserInfo(config['uid'], config['access_key'])
                 if 'uname' in bs_user_info:
-                    logger.info(f"[INFO] 登录B站账号 {bs_user_info['uname']} 成功！")
+                    print(f"[INFO] 登录B站账号 {bs_user_info['uname']} 成功！")
                     bs_info = {'uid': config['uid'], 'access_key': config['access_key']}
                 else:
                     config['last_login_succ'] = False
@@ -114,79 +110,79 @@ class LoginThread(QThread):
                     config['access_key'] = ""
                     config['uname'] = ""
                     write_conf(config)
-                    logger.info(f"[INFO] 缓存已失效，重新登录B站账号 {config['account']} 中...")
+                    print(f"[INFO] 缓存已失效，重新登录B站账号 {config['account']} 中...")
                     bs_info = await bsgamesdk.login(config['account'], config['password'], cap)
                     if "access_key" not in bs_info:
                         self.handle_login_failure(bs_info)
                         return
                     bs_user_info = await bsgamesdk.getUserInfo(bs_info['uid'], bs_info['access_key'])
-                    logger.info(f"[INFO] 登录B站账号 {bs_user_info['uname']} 成功！")
+                    print(f"[INFO] 登录B站账号 {bs_user_info['uname']} 成功！")
                     config['uid'] = bs_info['uid']
                     config['access_key'] = bs_info['access_key']
                     config['last_login_succ'] = True
                     config['uname'] = bs_user_info["uname"]
                     write_conf(config)
             else:
-                logger.info(f"[INFO] 登录B站账号 {config['account']} 中...")
+                print(f"[INFO] 登录B站账号 {config['account']} 中...")
                 bs_info = await bsgamesdk.login(config['account'], config['password'], cap)
                 if "access_key" not in bs_info:
                     self.handle_login_failure(bs_info)
                     return
                 bs_user_info = await bsgamesdk.getUserInfo(bs_info['uid'], bs_info['access_key'])
-                logger.info(f"[INFO] 登录B站账号 {bs_user_info['uname']} 成功！")
+                print(f"[INFO] 登录B站账号 {bs_user_info['uname']} 成功！")
                 config['uid'] = bs_info['uid']
                 config['access_key'] = bs_info['access_key']
                 config['last_login_succ'] = True
                 config['uname'] = bs_user_info["uname"]
                 write_conf(config)
             
-            logger.info("[INFO] 登录崩坏3账号中...")
+            print("[INFO] 登录崩坏3账号中...")
             import mihoyosdk
             bh_info = await mihoyosdk.verify(bs_info['uid'], bs_info['access_key'])
             if bh_info['retcode'] != 0:
-                logger.info("[INFO] 登录失败！")
-                logger.info("[INFO]" + str(bh_info))
+                print("[INFO] 登录失败！")
+                print("[INFO]" + str(bh_info))
                 self.login_complete.emit(False)
                 return
             
-            logger.info("[INFO] 登录成功！")
-            logger.info("[INFO] 获取OA服务器信息中...")
+            print("[INFO] 登录成功！")
+            print("[INFO] 获取OA服务器信息中...")
             bh_ver = await mihoyosdk.getBHVer(config)
             config['bh_ver'] = bh_ver
             write_conf(config)
-            logger.info(f"[INFO] 当前崩坏3版本: {bh_ver}")
+            print(f"[INFO] 当前崩坏3版本: {bh_ver}")
             oa = await mihoyosdk.getOAServer(config['oa_token'])
             if len(oa) < 100:
-                logger.info("[INFO] 获取OA服务器失败！请检查Token后重试")
+                print("[INFO] 获取OA服务器失败！请检查Token后重试")
                 self.login_complete.emit(False)
                 return
             
-            logger.info("[INFO] 获取OA服务器成功！")
+            print("[INFO] 获取OA服务器成功！")
             ui.loginBiliBtn.setText("账号已登录")
             config['account_login'] = True
             write_conf(config)
             self.login_complete.emit(True)
             
         except Exception as e:
-            logger.error(f"[ERROR] 登录过程中发生错误: {str(e)}")
+            print(f"[ERROR] 登录过程中发生错误: {str(e)}")
             ui.loginBiliBtn.setText("登录失败")
             ui.loginBiliBtn.setDisabled(False)
             self.login_complete.emit(False)
 
     def handle_login_failure(self, bs_info):
         if 'message' in bs_info:
-            logger.info("[INFO] 登录失败！")
+            print("[INFO] 登录失败！")
             if bs_info['message'] == 'PWD_INVALID':
-                logger.info("[INFO] 账号或密码错误！")
+                print("[INFO] 账号或密码错误！")
             else:
-                logger.info("[INFO] 原始返回：" + bs_info['message'])
+                print("[INFO] 原始返回：" + bs_info['message'])
         if 'need_captch' in bs_info:
-            logger.info("[INFO] 需要验证码！请打开下方网址进行操作！")
-            logger.info("[INFO]" + bs_info['cap_url'])
+            print("[INFO] 需要验证码！请打开下方网址进行操作！")
+            print("[INFO]" + bs_info['cap_url'])
             webbrowser.open_new(bs_info['cap_url'])
         else:
-            logger.info("[INFO] 登录失败！")
-            logger.info("[INFO]" + str(bs_info))
+            print("[INFO] 登录失败！")
+            print("[INFO]" + str(bs_info))
         ui.loginBiliBtn.setText("登陆账号")
         ui.loginBiliBtn.setDisabled(False)
         self.login_complete.emit(False)
@@ -209,7 +205,7 @@ class ParseThread(QThread):
                         if region:
                             image_processor.match_and_click(region=region)
                     else:
-                        logger.debug("崩坏3窗口未激活，跳过图像识别和点击")
+                        print("[INFO] 崩坏3窗口未激活，跳过图像识别和点击")
                 
                 if config['auto_clip']:
                     try:
@@ -218,9 +214,9 @@ class ParseThread(QThread):
                             if screenshot is not None:
                                 await image_processor.parse_qr_code(image_source='game_window', config=config, bh_info=bh_info)
                         else:
-                            logger.debug("崩坏3窗口未激活，跳过自动截屏")
+                            print("[INFO] 崩坏3窗口未激活，跳过自动截屏")
                     except Exception as e:
-                        logger.warning("自动截屏时出错: %s", str(e))
+                        print("[INFO] 自动截屏时出错: %s", str(e))
                 
                 if config['clip_check'] and config.get('account_login', False):
                     await image_processor.parse_qr_code(image_source='clipboard', config=config, bh_info=bh_info)
@@ -254,7 +250,7 @@ class SelfMainWindow(QMainWindow):
 
     @staticmethod
     def printLog(msg):
-        logger.info(msg)
+        print(msg)
         ui.logText.append(msg)
 
     def handle_login_complete(self, success):
@@ -269,11 +265,11 @@ class SelfMainWindow(QMainWindow):
     def login(self):
         global config
         if config.get('account_login', False):
-            logger.info("[INFO] 账号已登录")
+            print("[INFO] 账号已登录")
             ui.loginBiliBtn.setText("账号已登录")
             return
             
-        logger.info("[INFO] 开始登陆账号")
+        print("[INFO] 开始登陆账号")
         ui.loginBiliBtn.setText("登陆中")
         ui.loginBiliBtn.setDisabled(True)
         dialog = mainWindow.LoginDialog(window)
@@ -328,7 +324,7 @@ class SelfMainWindow(QMainWindow):
         if 'game_path' in config and config['game_path']:
             try:
                 subprocess.Popen([config['game_path']])
-                logger.info("[INFO] 正在启动崩坏3...")
+                print("[INFO] 正在启动崩坏3...")
                 
                 # 等待游戏窗口出现并将其移至前台
                 self.wait_for_game_window()
@@ -337,9 +333,9 @@ class SelfMainWindow(QMainWindow):
                 if config.get('auto_switch_mode', False):
                     QTimer.singleShot(3000, image_processor.switch_to_qr_login_mode)
             except Exception as e:
-                logger.error(f"[ERROR] 启动失败: {str(e)}")
+                print(f"[ERROR] 启动失败: {str(e)}")
         else:
-            logger.info("[INFO] 请先配置游戏路径！")
+            print("[INFO] 请先配置游戏路径！")
             QMessageBox.warning(window, "路径未配置", "请先配置游戏路径！")
 
     def switchToQRLoginMode(self):
@@ -409,7 +405,7 @@ if __name__ == '__main__':
     auto_login = False
     if len(sys.argv) > 1 and sys.argv[1] == '--auto-login':
         auto_login = True
-        logger.info("[INFO] 检测到自动登录参数，将启动一键登录模式")
+        print("[INFO] 检测到自动登录参数，将启动一键登录模式")
         
     fapp = Flask(__name__)
 
@@ -424,9 +420,9 @@ if __name__ == '__main__':
     @fapp.route('/ret', methods=["GET", "POST"])
     def ret():
         if not request.json:
-            logger.info("[INFO] 请求错误")
+            print("[INFO] 请求错误")
             abort(400)
-        logger.info("[INFO] Input = " + str(request.json))
+        print("[INFO] Input = " + str(request.json))
         global cap
         cap = request.json
         ui.backendLogin = LoginThread()
@@ -446,7 +442,7 @@ if __name__ == '__main__':
 
     try:
         if config['account'] != '':
-            logger.info("[INFO] 配置文件已有账号，尝试登录中...")
+            print("[INFO] 配置文件已有账号，尝试登录中...")
             ui.backendLogin = LoginThread()
             ui.backendLogin.update_log.connect(window.printLog)
             ui.backendLogin.login_complete.connect(window.handle_login_complete)
@@ -469,12 +465,13 @@ if __name__ == '__main__':
             
     except KeyError:
         write_conf(config)
-        logger.info("[INFO] 配置文件异常，重置并跳过登录")
+        print("[INFO] 配置文件异常，重置并跳过登录")
 
     ui.backendClipCheck = ParseThread()
     ui.backendClipCheck.update_log.connect(window.printLog)
     ui.backendClipCheck.start()
 
+    # ========== 设置 stdout 重定向 ==========
     stream = EmittingStream()
     sys.stdout = stream
     stream.textWritten.connect(lambda text: ui.logText.append(text) if text.startswith("[INFO]") else None)

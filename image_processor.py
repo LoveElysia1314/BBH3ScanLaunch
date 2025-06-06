@@ -1,11 +1,11 @@
 # -*- coding: utf-8 -*-
 """
-崩坏3自动登录图像处理模块
-功能特性：
-1. 模板匹配引擎 - 用于识别游戏界面元素
-2. 二维码解析引擎 - 用于识别登录二维码
-3. 智能图像处理 - 优化资源使用
-4. 异常安全处理
+崩坏3自动登录图像处理模块 - 优化版
+主要改进：
+1. 改进模板缩放机制 - 基于文件名中的分辨率信息智能缩放
+2. 优化屏幕捕获性能 - 使用更高效的截图方式
+3. 增强匹配准确性 - 添加多尺度匹配和阈值控制
+4. 改进游戏窗口区域获取逻辑
 """
 
 import os
@@ -16,221 +16,270 @@ import pyautogui
 import pygetwindow as gw
 from pyzbar.pyzbar import decode
 from PIL import Image, ImageGrab
-from functools import lru_cache
 from ctypes import windll
-import logging
-
-# 配置 logging
-logging.basicConfig(level=logging.DEBUG, format='%(levelname)s: %(message)s')
-logger = logging.getLogger(__name__)
+import re
 
 # 常量定义
 TEMPLATE_DIR = "Pictures_to_Match"
-SCREENSHOT_DELAY = 0.5  # 截图延迟时间(秒)
+SCREENSHOT_DELAY = 0.2  # 缩短截图延迟时间
 GAME_WINDOW_TITLE = "崩坏3"
-TEMPLATE_SCALE_FACTOR = 8000  # 模板基准分辨率 (8000p)
+DEFAULT_RESOLUTION = 8000  # 默认模板分辨率
 
 def is_game_window_active():
-    """
-    检查当前活动窗口的标题是否与给定的 game_window_title 相匹配。
-    
-    :param game_window_title: 要检查的游戏窗口标题
-    :return: 如果当前活动窗口的标题与 game_window_title 相匹配，返回 True；否则返回 False
-    """
+    """检查崩坏3窗口是否激活"""
     try:
         active_window = gw.getActiveWindow()
-        if active_window and active_window.title == GAME_WINDOW_TITLE:
-            return True
-        else:
-            return False
+        return active_window and GAME_WINDOW_TITLE in active_window.title
+
     except Exception as e:
         print(f"检查活动窗口时出错: {e}")
         return False
 
-
 class ImageProcessor:
-    """图像处理引擎 - 整合模板匹配和二维码解析功能"""
+    """图像处理引擎 - 优化版"""
     def __init__(self, template_dir=TEMPLATE_DIR):
         self.template_dir = template_dir
-        self.screen_size = pyautogui.size()
+        self.screen_width, self.screen_height = pyautogui.size()
         self.template_cache = {}
         self._load_templates()
     
+    def _get_resolution_from_filename(self, filename):
+        """从文件名中提取分辨率信息"""
+        match = re.search(r'(\d+)p', filename)
+        return int(match.group(1)) if match else DEFAULT_RESOLUTION
+    
     def _load_templates(self):
-        """加载所有模板图片到缓存"""
+        """智能加载并缩放模板图片"""
         if not os.path.exists(self.template_dir):
-            logger.warning("模板目录不存在 %s", self.template_dir)
+            print(f"模板目录不存在: {self.template_dir}")
             return
         
-        for filename in os.listdir(self.template_dir):
+        # 确保Default目录存在
+        default_dir = os.path.join(self.template_dir, "Default")
+        if not os.path.exists(default_dir):
+            print(f"默认模板目录不存在: {default_dir}")
+            return
+        
+        # 创建当前分辨率目录
+        current_res_dir = os.path.join(self.template_dir, f"{self.screen_height}p")
+        os.makedirs(current_res_dir, exist_ok=True)
+        
+        # 处理所有默认模板
+        for filename in os.listdir(default_dir):
             if not filename.lower().endswith(('.png', '.jpg', '.jpeg')):
                 continue
                 
-            filepath = os.path.join(self.template_dir, filename)
-            template = cv2.imread(filepath, cv2.IMREAD_GRAYSCALE)
-            if template is None:
-                logger.warning("无法加载模板 %s", filename)
-                continue
-                
-            scale_factor = self.screen_size.height / TEMPLATE_SCALE_FACTOR
-            if scale_factor != 1.0:
-                new_size = (int(template.shape[1] * scale_factor),
-                            int(template.shape[0] * scale_factor))
-                template = cv2.resize(template, new_size)
-                
-            self.template_cache[filename] = template
-            logger.info("加载模板: %s (%dx%d)", filename, template.shape[1], template.shape[0])
+            src_path = os.path.join(default_dir, filename)
+            dest_path = os.path.join(current_res_dir, filename)
+            
+            # 从文件名获取原始分辨率
+            src_resolution = self._get_resolution_from_filename(filename)
+            scale_factor = self.screen_height / src_resolution
+            
+            # 检查是否需要创建新模板
+            if not os.path.exists(dest_path) or os.path.getmtime(src_path) > os.path.getmtime(dest_path):
+                template = cv2.imread(src_path, cv2.IMREAD_GRAYSCALE)
+                if template is None:
+                    print(f"无法加载模板: {filename}")
+                    continue
+                    
+                # 智能缩放
+                new_width = int(template.shape[1] * scale_factor)
+                new_height = int(template.shape[0] * scale_factor)
+                template = cv2.resize(template, (new_width, new_height))
+                cv2.imwrite(dest_path, template)
+                print(f"创建缩放模板: {filename} ({new_width}x{new_height})")
+            
+            # 加载模板
+            template = cv2.imread(dest_path, cv2.IMREAD_GRAYSCALE)
+            if template is not None:
+                self.template_cache[filename] = template
+                print(f"加载模板: {filename} ({template.shape[1]}x{template.shape[0]})")
     
-    @lru_cache(maxsize=1)
     def get_game_window_region(self):
-        """获取游戏窗口区域并缓存结果"""
+        """精确获取游戏窗口区域"""
         try:
             windows = gw.getWindowsWithTitle(GAME_WINDOW_TITLE)
-            if windows:
-                window = windows[0]
-                if not window.isMinimized:
-                    return (window.left, window.top, window.right, window.bottom)
-            return None
-        except Exception:
+            if not windows:
+                return None
+                
+            window = windows[0]
+            if window.isMinimized:
+                window.restore()
+                time.sleep(0.5)
+                
+            return (window.left, window.top, window.width, window.height)
+        except Exception as e:
+            print(f"获取窗口区域失败: {e}")
             return None
     
-    def capture_full_screen(self):
-        """捕获全屏并转换为灰度图"""
+    def capture_screen(self, region=None):
+        """高效屏幕捕获"""
         time.sleep(SCREENSHOT_DELAY)
-        screenshot = pyautogui.screenshot()
-        screen_np = np.array(screenshot)
-        return cv2.cvtColor(screen_np, cv2.COLOR_RGB2GRAY)
-    
-    def capture_game_window(self):
-        """捕获游戏窗口区域"""
-        region = self.get_game_window_region()
-        if not region:
-            return None
         
-        left, top, right, bottom = region
-        width, height = right - left, bottom - top
-        
-        if width <= 0 or height <= 0:
-            return None
-            
-        time.sleep(SCREENSHOT_DELAY)
-        screenshot = pyautogui.screenshot(region=(left, top, width, height))
-        screen_np = np.array(screenshot)
-        return cv2.cvtColor(screen_np, cv2.COLOR_RGB2GRAY)
-    
-    def match_and_click(self, threshold=0.8, click_offset=(0, 0), region=None):
-        """
-        执行模板匹配并点击
-        :param threshold: 匹配阈值 (0-1)
-        :param click_offset: 点击位置偏移 (x, y)
-        :param region: 指定搜索区域 (left, top, width, height)
-        :return: 是否找到并点击了匹配项
-        """
         if region:
             left, top, width, height = region
-            screen_gray = pyautogui.screenshot(region=(left, top, width, height))
-            screen_gray = cv2.cvtColor(np.array(screen_gray), cv2.COLOR_RGB2GRAY)
-            global_offset = (left, top)
+            screenshot = pyautogui.screenshot(region=(left, top, width, height))
         else:
-            screen_gray = self.capture_full_screen()
-            global_offset = (0, 0)
+            screenshot = pyautogui.screenshot()
+            
+        screen_np = np.array(screenshot)
+        return cv2.cvtColor(screen_np, cv2.COLOR_RGB2GRAY)
+    
+    def match_template(self, template_name, threshold=0.8, region=None, scales=[1.0, 0.9, 1.1]):
+        """
+        多尺度模板匹配
+        :param template_name: 模板文件名
+        :param threshold: 匹配阈值
+        :param region: 搜索区域
+        :param scales: 缩放尺度列表
+        :return: 匹配位置和置信度，或(None, 0)
+        """
+        if template_name not in self.template_cache:
+            print(f"模板不存在: {template_name}")
+            return None, 0
+            
+        template = self.template_cache[template_name]
+        screen_gray = self.capture_screen(region)
         
-        for name, template in self.template_cache.items():
-            result = cv2.matchTemplate(screen_gray, template, cv2.TM_CCOEFF_NORMED)
+        best_match_val = 0
+        best_match_loc = None
+        best_scale = 1.0
+        
+        # 多尺度匹配
+        for scale in scales:
+            scaled_template = cv2.resize(template, None, fx=scale, fy=scale)
+            if scaled_template.shape[0] > screen_gray.shape[0] or scaled_template.shape[1] > screen_gray.shape[1]:
+                continue
+                
+            result = cv2.matchTemplate(screen_gray, scaled_template, cv2.TM_CCOEFF_NORMED)
             min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(result)
             
-            if max_val >= threshold:
-                x_center = max_loc[0] + template.shape[1] // 2 + global_offset[0] + click_offset[0]
-                y_center = max_loc[1] + template.shape[0] // 2 + global_offset[1] + click_offset[1]
-                x_center = max(0, min(x_center, self.screen_size.width - 1))
-                y_center = max(0, min(y_center, self.screen_size.height - 1))
-                pyautogui.click(x_center, y_center)
-                logger.info("点击匹配项: %s (置信度: %.2f @ (%d, %d))", name, max_val, x_center, y_center)
-                return
-        logger.debug("未找到匹配项")
-        return
+            if max_val > best_match_val:
+                best_match_val = max_val
+                best_match_loc = max_loc
+                best_scale = scale
+        
+        if best_match_val >= threshold:
+            # 计算中心位置
+            scaled_template = cv2.resize(template, None, fx=best_scale, fy=best_scale)
+            x = best_match_loc[0] + scaled_template.shape[1] // 2
+            y = best_match_loc[1] + scaled_template.shape[0] // 2
+            
+            if region:
+                x += region[0]
+                y += region[1]
+                
+            return (x, y), best_match_val
+        
+        return None, best_match_val
+    
+    def match_and_click(self, threshold=0.8, click_offset=(0, 0), region=None, max_attempts=1):
+        """
+        遍历当前分辨率对应模板目录下的所有图片，匹配到第一个符合要求的模板后点击并退出。
+        
+        :param threshold: 匹配阈值
+        :param click_offset: 点击偏移量
+        :param region: 搜索区域
+        :param max_attempts: 每个模板的最大匹配尝试次数
+        :return: 是否成功点击
+        """
+        print("[INFO] 开始尝试匹配当前分辨率下所有模板...")
+
+        # 遍历所有缓存中的模板
+        for template_name in self.template_cache:
+            print(f"[INFO] 尝试匹配模板: {template_name}")
+            for attempt in range(max_attempts):
+                location, confidence = self.match_template(template_name, threshold, region)
+                if location:
+                    x, y = location
+                    x += click_offset[0]
+                    y += click_offset[1]
+
+                    # 限制点击坐标在屏幕范围内
+                    x = max(0, min(x, self.screen_width - 1))
+                    y = max(0, min(y, self.screen_height - 1))
+
+                    pyautogui.click(x, y)
+                    print(f"[INFO] 成功匹配模板: {template_name} (置信度: {confidence:.2f}) @ ({x}, {y})")
+                    return True
+                print(f"[INFO] 模板 {template_name} 第 {attempt+1}/{max_attempts} 次匹配失败 (置信度: {confidence:.2f})")
+                time.sleep(0.5)
+
+        print("[INFO] 所有模板均未匹配成功")
+        return False
 
     async def parse_qr_code(self, image_source='clipboard', config=None, bh_info=None):
         """
         解析二维码并处理崩坏3登录
         :param image_source: 图片来源 'clipboard' 或 'game_window'
-        :param config: 配置字典，用于登录验证
+        :param config: 配置字典
         :param bh_info: 崩坏3登录信息
-        :return: 是否成功解析并完成登录
+        :return: 是否成功解析
         """
-        if image_source == 'clipboard':
-            try:
+        try:
+            if image_source == 'clipboard':
                 im = ImageGrab.grabclipboard()
                 if not isinstance(im, Image.Image):
-                    return
-            except Exception as e:
-                logger.error("获取剪贴板图像失败: %s", str(e))
-                return
-        elif image_source == 'game_window':
-            region = self.get_game_window_region()
-            if not region:
-                return
-                
-            left, top, right, bottom = region
-            width, height = right - left, bottom - top
-            if width <= 0 or height <= 0:
-                return
-                
-            im = pyautogui.screenshot(region=(left, top, width, height))
-        else:
-            return
-        
-        logger.info("识别二维码...")
-        try:
+                    print("[INFO] 剪贴板中没有图像")
+                    return False
+            elif image_source == 'game_window':
+                region = self.get_game_window_region()
+                if not region:
+                    return False
+                    
+                left, top, width, height = region
+                im = pyautogui.screenshot(region=(left, top, width, height))
+            else:
+                return False
+            
+            print("[INFO] 识别二维码...")
             result = decode(im)
             if not result:
-                logger.debug("未找到二维码")
-                return
+                print("[INFO] 未找到二维码")
+                return False
                 
             url = result[0].data.decode('utf-8')
             if 'ticket=' not in url:
-                logger.debug("无效的登录二维码")
-                return
+                print("[INFO] 无效的登录二维码")
+                return False
                 
             params = url.split('?')[1].split('&')
             ticket = next((p.split('=')[1] for p in params if p.startswith('ticket=')), None)
             
             if ticket and config and bh_info:
-                logger.info("二维码识别成功，开始请求崩坏3服务器完成扫码")
+                print("[INFO] 二维码识别成功，开始请求崩坏3服务器完成扫码")
                 import mihoyosdk
-                await mihoyosdk.scanCheck(lambda msg: logger.info(msg), bh_info, ticket, config)
+                await mihoyosdk.scanCheck(lambda msg: print(msg), bh_info, ticket, config)
                 time.sleep(1)
                 self.clear_clipboard()
-                return
+                return True
             else:
-                logger.debug("成功解析二维码，但缺少登录信息")
-                return
+                print("[INFO] 成功解析二维码，但缺少登录信息")
+                return False
         except Exception as e:
-            logger.error("解析二维码失败: %s", str(e))
-            return
+            print(f"解析二维码失败: {str(e)}")
+            return False
     
     def switch_to_qr_login_mode(self):
         """切换到扫码登录模式"""
         region = self.get_game_window_region()
         if not region:
-            return
+            return False
         
-        left, top, right, bottom = region
-        window_width = right - left
-        switch_x = left + window_width * 0.7
-        switch_y = bottom - 100
-        switch_x = max(left, min(switch_x, right - 1))
-        switch_y = max(top, min(switch_y, bottom - 1))
+        left, top, width, height = region
+        switch_x = left + width * 0.7
+        switch_y = top + height - 100
         
         try:
             pyautogui.press('esc')
             time.sleep(1)
             pyautogui.click(switch_x, switch_y)
             time.sleep(0.5)
-            return
+            return True
         except Exception as e:
-            logger.warning("切换登录模式失败: %s", str(e))
-            return
+            print(f"切换登录模式失败: {str(e)}")
+            return False
     
     def clear_clipboard(self):
         """清空剪贴板"""
@@ -238,7 +287,8 @@ class ImageProcessor:
             if windll.user32.OpenClipboard(None):
                 windll.user32.EmptyClipboard()
                 windll.user32.CloseClipboard()
+                print("[INFO] 剪贴板已清空")
         except Exception as e:
-            logger.error("清空剪贴板失败: %s", str(e))
+            print(f"清空剪贴板失败: {str(e)}")
 
 image_processor = ImageProcessor()
