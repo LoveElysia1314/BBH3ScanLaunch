@@ -11,7 +11,7 @@ from PyQt6.QtCore import QThread, pyqtSignal, QObject, Qt, QTimer
 from PyQt6.QtWidgets import QApplication, QMainWindow, QFileDialog, QMessageBox
 import subprocess
 import mainWindow
-from image_processor import image_processor, is_game_window_exist, active_game_window
+from image_processor import image_processor, is_game_window_exist
 from flask import Flask, abort, render_template, request
 
 # ========== EmittingStream 类：用于拦截 stdout 输出 ==========
@@ -67,7 +67,7 @@ def init_conf():
 
 # ========== 写入配置文件 ==========
 def write_conf(old=None):
-    config_temp = json.loads('{"account":"","password":"","sleep_time":3,"ver":6,'
+    config_temp = json.loads('{"account":"","password":"","sleep_time":1,"ver":6,'
                              '"clip_check":false,"auto_close":false,"uid":0,'
                              '"access_key":"","last_login_succ":false,"bh_ver":"7.8.0",'
                              '"uname":"","auto_clip":false,"oa_token":"ebdda08dce6feb6bc552d393bae58c81",'
@@ -195,28 +195,27 @@ class ParseThread(QThread):
     async def check(self):
         global config, bh_info
         while True:
-            if config['auto_close']:
-                if config['auto_switch_mode']:
+            if config['auto_close'] and config['auto_switch_mode']:
+                if is_game_window_exist():
+                    image_processor.match_and_click()
+                else:
+                    print("[DEBUG] 崩坏3窗口不存在，跳过图像识别和点击")
+            
+            if config['auto_clip']:
+                try:
                     if is_game_window_exist():
-                        image_processor.match_and_click()
+                        screenshot = image_processor.capture_screen()
+                        if screenshot is not None:
+                            await image_processor.parse_qr_code(image_source='game_window', config=config, bh_info=bh_info)
                     else:
-                        print("[DEBUG] 崩坏3窗口不存在，跳过图像识别和点击")
-                
-                if config['auto_clip']:
-                    try:
-                        if is_game_window_exist():
-                            screenshot = image_processor.capture_screen()
-                            if screenshot is not None:
-                                await image_processor.parse_qr_code(image_source='game_window', config=config, bh_info=bh_info)
-                        else:
-                            print("[DEBUG] 崩坏3窗口不存在，跳过自动截屏")
-                    except Exception as e:
-                        print("[INFO] 自动截屏时出错: %s", str(e))
-                
-                if config['clip_check'] and config.get('account_login', False):
-                    await image_processor.parse_qr_code(image_source='clipboard', config=config, bh_info=bh_info)
-                
-                time.sleep(config['sleep_time'])
+                        print("[DEBUG] 崩坏3窗口不存在，跳过自动截屏")
+                except Exception as e:
+                    print("[INFO] 自动截屏时出错: %s", str(e))
+            
+            if config['clip_check'] and config.get('account_login', False):
+                await image_processor.parse_qr_code(image_source='clipboard', config=config, bh_info=bh_info)
+            
+            time.sleep(config['sleep_time'])
 
 # ========== 登录按钮点击回调 ==========
 def login_accept():
@@ -319,8 +318,6 @@ class SelfMainWindow(QMainWindow):
             try:
                 subprocess.Popen([config['game_path']])
                 print("[INFO] 正在启动崩坏3...")
-                # 使用 QTimer.singleShot 延迟执行 active_game_window
-                QTimer.singleShot(15000, active_game_window)  # 15000 毫秒 = 15 秒
             except Exception as e:
                 print(f"[ERROR] 启动失败: {str(e)}")
         else:
