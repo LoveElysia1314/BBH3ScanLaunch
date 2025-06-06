@@ -25,21 +25,7 @@ TEMPLATE_DIR = "Pictures_to_Match"
 SCREENSHOT_DELAY = 0.2  # 截图延迟时间
 GAME_WINDOW_TITLE = "崩坏3"
 DEFAULT_RESOLUTION = 8000  # 默认模板分辨率
-WINDOW_RETRY_LIMIT = 3  # 窗口查找重试次数
-WINDOW_RETRY_DELAY = 1  # 重试间隔(秒)
 
-def is_game_window_active():
-    """检查崩坏3窗口是否激活"""
-    try:
-        active_window = gw.getActiveWindow()
-        if active_window and GAME_WINDOW_TITLE == active_window.title:
-            print("[DEBUG] 游戏窗口处于激活状态")
-            return True
-        print("[DEBUG] 游戏窗口未激活")
-        return False
-    except Exception as e:
-        print(f"[INFO] 检查窗口激活状态出错: {e}")
-        return False
 
 def is_game_window_exist():
     """检查所有窗口中是否存在标题全字匹配GAME_WINDOW_TITLE的窗口"""
@@ -82,19 +68,12 @@ class WindowCapture:
         self._retry_count = 0
 
     def _find_window(self):
-        """查找窗口句柄，支持重试机制"""
+        """查找窗口句柄"""
         self.hwnd = win32gui.FindWindow(None, self.window_title)
         if self.hwnd:
             print(f"[DEBUG] 找到窗口句柄: {self.hwnd}")
             return True
-        
-        if self._retry_count < WINDOW_RETRY_LIMIT:
-            print(f"[INFO] 未找到窗口，将在 {WINDOW_RETRY_DELAY} 秒后重试 ({self._retry_count+1}/{WINDOW_RETRY_LIMIT})")
-            time.sleep(WINDOW_RETRY_DELAY)
-            self._retry_count += 1
-            return self._find_window()
-        
-        print(f"[WARNING] 多次尝试后仍未找到窗口: {self.window_title}")
+        print(f"[WARNING] 未找到窗口: {self.window_title}")
         return False
 
     def capture_window(self):
@@ -285,7 +264,7 @@ class ImageProcessor:
             template_name, (x, y), confidence = best_match
             x = max(0, min(x, self.screen_width - 1))
             y = max(0, min(y, self.screen_height - 1))
-
+            active_game_window()
             import pyautogui
             print(f"[INFO] 点击匹配位置: {template_name} @ ({x}, {y}), 置信度: {confidence:.2f}")
             pyautogui.click(x, y)
