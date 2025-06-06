@@ -155,7 +155,7 @@ class ImageProcessor:
         screen_np = np.array(screenshot)
         return cv2.cvtColor(screen_np, cv2.COLOR_RGB2GRAY)
     
-    def match_template(self, template_name, threshold=0.8, region=None, scales=[1.0, 0.9, 1.1]):
+    def match_template(self, template_name, threshold=0.8, region=None, scales=[1.0]):
         """
         多尺度模板匹配
         :param template_name: 模板文件名
@@ -290,25 +290,6 @@ class ImageProcessor:
             print(f"解析二维码失败: {str(e)}")
             return False
     
-    def switch_to_qr_login_mode(self):
-        """切换到扫码登录模式"""
-        region = self.get_game_window_region()
-        if not region:
-            return False
-        
-        left, top, width, height = region
-        switch_x = left + width * 0.7
-        switch_y = top + height - 100
-        
-        try:
-            pyautogui.press('esc')
-            time.sleep(1)
-            pyautogui.click(switch_x, switch_y)
-            time.sleep(0.5)
-            return True
-        except Exception as e:
-            print(f"切换登录模式失败: {str(e)}")
-            return False
     
     def clear_clipboard(self):
         """清空剪贴板"""

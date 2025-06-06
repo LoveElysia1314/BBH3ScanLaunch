@@ -5,12 +5,10 @@ import json
 import os.path
 import time
 import webbrowser
-import pygetwindow as gw
 from json.decoder import JSONDecodeError
 from threading import Thread
 from PyQt6.QtCore import QThread, pyqtSignal, QObject, Qt, QTimer
 from PyQt6.QtWidgets import QApplication, QMainWindow, QFileDialog, QMessageBox
-from pyzbar.pyzbar import decode
 import subprocess
 import mainWindow
 from image_processor import image_processor, is_game_window_active, active_game_window
@@ -200,7 +198,6 @@ class ParseThread(QThread):
             if config['auto_close']:
                 if config['auto_switch_mode']:
                     if is_game_window_active():
-                        image_processor.switch_to_qr_login_mode()
                         region = image_processor.get_game_window_region()
                         if region:
                             image_processor.match_and_click(region=region)
@@ -303,7 +300,6 @@ class SelfMainWindow(QMainWindow):
         write_conf(config)
 
     def autoSwitchModeSwitch(self, boolean):
-        """处理自动切换扫码模式复选框状态变化"""
         if boolean:
             ui.autoSwitchModeCheck.setText("当前状态:启用")
         else:
@@ -326,39 +322,16 @@ class SelfMainWindow(QMainWindow):
                 subprocess.Popen([config['game_path']])
                 print("[INFO] 正在启动崩坏3...")
                 # 使用 QTimer.singleShot 延迟执行 active_game_window
-                QTimer.singleShot(10000, active_game_window)  # 10000 毫秒 = 10 秒
+                QTimer.singleShot(15000, active_game_window)  # 15000 毫秒 = 15 秒
             except Exception as e:
                 print(f"[ERROR] 启动失败: {str(e)}")
         else:
             print("[INFO] 请先配置游戏路径！")
             QMessageBox.warning(window, "路径未配置", "请先配置游戏路径！")
 
-    def switchToQRLoginMode(self):
-        """切换到扫码登录模式（模拟按键）"""
-        try:
-            import pyautogui
-            # 模拟按下 ESC 键打开登录界面
-            pyautogui.press('esc')
-            time.sleep(1)
-            
-            # 模拟按下 Tab 键切换到扫码登录
-            pyautogui.press('tab')
-            time.sleep(0.5)
-            pyautogui.press('tab')
-            time.sleep(0.5)
-            pyautogui.press('enter')
-            
-            print("[INFO] 已自动切换到扫码登录界面")
-        except Exception as e:
-            print(f"[WARNING] 自动切换扫码模式失败: {str(e)}")
-
     def oneClickLogin(self):
         """一键登录功能"""
-        self.prev_clip_check = config['clip_check']
-        self.prev_auto_clip = config['auto_clip']
-        self.prev_auto_close = config['auto_close']
-        self.prev_auto_switch = config.get('auto_switch_mode', False)
-        
+        self.launchGame()
         config['clip_check'] = True
         config['auto_clip'] = True
         config['auto_close'] = True
@@ -369,13 +342,11 @@ class SelfMainWindow(QMainWindow):
         ui.autoCloseCheck.setText("当前状态:启用")
         ui.autoSwitchModeCheck.setText("当前状态:启用")
         
-        self.launchGame()
+        print("[INFO] 一键登录模式已启用")
+        print("[INFO] 已开启: 解析二维码, 自动截屏, 扫码完成后自动退出, 自动切换扫码模式")
+        print("[INFO] 这些设置仅在当前会话有效，不会写入配置文件")
         
-        self.printLog("一键登录模式已启用")
-        self.printLog("已开启: 解析二维码, 自动截屏, 扫码完成后自动退出, 自动切换扫码模式")
-        self.printLog("这些设置仅在当前会话有效，不会写入配置文件")
-        
-        QTimer.singleShot(60000, self.restoreOriginalSettings)
+        QTimer.singleShot(120000, self.restoreOriginalSettings)
 
     def restoreOriginalSettings(self):
         """恢复原始设置"""
@@ -389,7 +360,7 @@ class SelfMainWindow(QMainWindow):
         ui.autoCloseCheck.setText("当前状态:启用" if self.prev_auto_close else "当前状态:关闭")
         ui.autoSwitchModeCheck.setText("当前状态:启用" if self.prev_auto_switch else "当前状态:关闭")
         
-        self.printLog("一键登录模式已结束，恢复原始设置")
+        print("一键登录模式已结束，恢复原始设置")
 
 # ========== Flask 启动 ==========
 if __name__ == '__main__':
