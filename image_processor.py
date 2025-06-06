@@ -34,6 +34,35 @@ def is_game_window_active():
     except Exception as e:
         print(f"[INFO] 检查活动窗口时出错: {e}")
         return False
+    
+def active_game_window():
+    """
+    激活指定标题的游戏窗口（如“崩坏3”）。
+    若窗口存在，则将其置顶并恢复（如果最小化），否则不执行任何操作。
+    
+    :return: 是否成功激活窗口
+    """
+    try:
+        # 查找所有标题匹配的窗口
+        windows = gw.getWindowsWithTitle(GAME_WINDOW_TITLE)
+        
+        if not windows:
+            print(f"[INFO] 未找到标题为 '{GAME_WINDOW_TITLE}' 的窗口")
+            return False
+
+        window = windows[0]  # 取第一个匹配的窗口
+
+        if window.isMinimized:
+            window.restore()  # 如果窗口最小化，先恢复
+            time.sleep(0.5)   # 等待恢复完成
+
+        window.activate()     # 激活窗口（置顶并获得焦点）
+        print(f"[INFO] 已成功激活窗口: {GAME_WINDOW_TITLE}")
+        return True
+
+    except Exception as e:
+        print(f"[ERROR] 激活窗口失败: {e}")
+        return False
 
 class ImageProcessor:
     """图像处理引擎 - 优化版"""

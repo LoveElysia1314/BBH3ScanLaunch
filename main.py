@@ -13,7 +13,7 @@ from PyQt6.QtWidgets import QApplication, QMainWindow, QFileDialog, QMessageBox
 from pyzbar.pyzbar import decode
 import subprocess
 import mainWindow
-from image_processor import image_processor, is_game_window_active
+from image_processor import image_processor, is_game_window_active, active_game_window
 from flask import Flask, abort, render_template, request
 
 # ========== EmittingStream 类：用于拦截 stdout 输出 ==========
@@ -326,8 +326,9 @@ class SelfMainWindow(QMainWindow):
                 subprocess.Popen([config['game_path']])
                 print("[INFO] 正在启动崩坏3...")
                 
+                time.sleep(10)
                 # 等待游戏窗口出现并将其移至前台
-                self.wait_for_game_window()
+                active_game_window()
                 
                 # 如果启用自动切换模式，则在窗口检测到后切换到二维码登录模式
                 if config.get('auto_switch_mode', False):
