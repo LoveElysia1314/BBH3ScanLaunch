@@ -205,7 +205,7 @@ class ParseThread(QThread):
                         if region:
                             image_processor.match_and_click(region=region)
                     else:
-                        print("[INFO] 崩坏3窗口未激活，跳过图像识别和点击")
+                        print("[DEBUG] 崩坏3窗口未激活，跳过图像识别和点击")
                 
                 if config['auto_clip']:
                     try:
@@ -214,7 +214,7 @@ class ParseThread(QThread):
                             if screenshot is not None:
                                 await image_processor.parse_qr_code(image_source='game_window', config=config, bh_info=bh_info)
                         else:
-                            print("[INFO] 崩坏3窗口未激活，跳过自动截屏")
+                            print("[DEBUG] 崩坏3窗口未激活，跳过自动截屏")
                     except Exception as e:
                         print("[INFO] 自动截屏时出错: %s", str(e))
                 

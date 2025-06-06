@@ -29,10 +29,10 @@ def is_game_window_active():
     """检查崩坏3窗口是否激活"""
     try:
         active_window = gw.getActiveWindow()
-        return active_window and GAME_WINDOW_TITLE in active_window.title
+        return GAME_WINDOW_TITLE == active_window.title
 
     except Exception as e:
-        print(f"检查活动窗口时出错: {e}")
+        print(f"[INFO] 检查活动窗口时出错: {e}")
         return False
 
 class ImageProcessor:
@@ -51,13 +51,13 @@ class ImageProcessor:
     def _load_templates(self):
         """智能加载并缩放模板图片"""
         if not os.path.exists(self.template_dir):
-            print(f"模板目录不存在: {self.template_dir}")
+            print(f"[INFO] 模板目录不存在: {self.template_dir}")
             return
         
         # 确保Default目录存在
         default_dir = os.path.join(self.template_dir, "Default")
         if not os.path.exists(default_dir):
-            print(f"默认模板目录不存在: {default_dir}")
+            print(f"[INFO] 默认模板目录不存在: {default_dir}")
             return
         
         # 创建当前分辨率目录
@@ -80,7 +80,7 @@ class ImageProcessor:
             if not os.path.exists(dest_path) or os.path.getmtime(src_path) > os.path.getmtime(dest_path):
                 template = cv2.imread(src_path, cv2.IMREAD_GRAYSCALE)
                 if template is None:
-                    print(f"无法加载模板: {filename}")
+                    print(f"[INFO] 无法加载模板: {filename}")
                     continue
                     
                 # 智能缩放
@@ -88,13 +88,13 @@ class ImageProcessor:
                 new_height = int(template.shape[0] * scale_factor)
                 template = cv2.resize(template, (new_width, new_height))
                 cv2.imwrite(dest_path, template)
-                print(f"创建缩放模板: {filename} ({new_width}x{new_height})")
+                print(f"[INFO] 创建缩放模板: {filename} ({new_width}x{new_height})")
             
             # 加载模板
             template = cv2.imread(dest_path, cv2.IMREAD_GRAYSCALE)
             if template is not None:
                 self.template_cache[filename] = template
-                print(f"加载模板: {filename} ({template.shape[1]}x{template.shape[0]})")
+                print(f"[DEBUG] 加载模板: {filename} ({template.shape[1]}x{template.shape[0]})")
     
     def get_game_window_region(self):
         """精确获取游戏窗口区域"""
@@ -110,7 +110,7 @@ class ImageProcessor:
                 
             return (window.left, window.top, window.width, window.height)
         except Exception as e:
-            print(f"获取窗口区域失败: {e}")
+            print(f"[INFO] 获取窗口区域失败: {e}")
             return None
     
     def capture_screen(self, region=None):
@@ -136,7 +136,7 @@ class ImageProcessor:
         :return: 匹配位置和置信度，或(None, 0)
         """
         if template_name not in self.template_cache:
-            print(f"模板不存在: {template_name}")
+            print(f"[INFO] 模板不存在: {template_name}")
             return None, 0
             
         template = self.template_cache[template_name]
