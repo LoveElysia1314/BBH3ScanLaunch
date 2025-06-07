@@ -293,20 +293,23 @@ class ImageProcessor:
         print("[DEBUG] 未找到符合条件的匹配")
         return False
 
-    async def parse_qr_code(self, image_source='clipboard', config=None, bh_info=None):
+    async def parse_qr_code(self, image_source=None, config=None, bh_info=None):
         """
         解析二维码并处理崩坏3登录
         :param image_source: 图片来源 'clipboard' 或 'game_window'
         :return: 是否成功解析
         """
         try:
-            print(f"[INFO] 开始解析二维码，来源: {image_source}")
+            if image_processor is not None:
+                print(f"[DEBUG] 没有图像")
+                return False
             
             if image_source == 'clipboard':
                 print("[DEBUG] 从剪贴板获取图像")
                 im = ImageGrab.grabclipboard()
                 if not isinstance(im, Image.Image):
                     print("[DEBUG] 剪贴板中没有有效图像")
+                    self.clear_clipboard()
                     return False
                     
             elif image_source == 'game_window':
