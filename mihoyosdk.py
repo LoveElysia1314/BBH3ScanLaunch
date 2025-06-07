@@ -134,8 +134,8 @@ async def scanConfirm(bhinfoR, ticket, config):
         print('[INFO] 扫码成功！')
         if config['auto_close']:
             print('[INFO] 已启用自动退出')
-            print('[INFO] 3秒后将自动关闭扫码器')
-            asyncio.sleep(3)
+            print('[INFO] 5秒后将自动关闭扫码器')
+            asyncio.sleep(5)
             click_center_of_game_window()
             QApplication.instance().quit
     else:
