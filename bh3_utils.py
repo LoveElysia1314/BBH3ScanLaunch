@@ -25,6 +25,30 @@ GAME_WINDOW_TITLE = "崩坏3"
 DEFAULT_RESOLUTION = 8000  # 默认模板分辨率
 
 
+import pyautogui
+import pygetwindow as gw
+import time
+
+def click_center_of_game_window():
+    """
+    激活GAME_WINDOW_TITLE对应窗口并点击中心位置。
+    """
+    if is_game_window_exist():
+        # 获取当前激活的窗口
+        active_window = gw.getActiveWindow()
+        if active_window is None:
+            print("[INFO] 未找到任何激活窗口。")
+            return
+        # 获取窗口的位置和尺寸
+        left, top, width, height = active_window.left, active_window.top, active_window.width, active_window.heigh
+        # 计算中心点坐标
+        center_x = left + width // 2
+        center_y = top + height // 2
+        # 移动鼠标到窗口中心并点击
+        pyautogui.click(center_x, center_y)
+        print(f"[DEBUG]已点击窗口中心: ({center_x}, {center_y})")
+
+
 def is_game_window_exist():
     """检查所有窗口中是否存在标题全字匹配GAME_WINDOW_TITLE的窗口"""
     try:
@@ -32,7 +56,7 @@ def is_game_window_exist():
         print(f"[DEBUG] 游戏窗口存在检查: {'存在' if exist else '不存在'}")
         return exist
     except Exception as e:
-        print(f"[INFO] 检查窗口存在状态出错: {e}")
+        print(f"[ERROR] 检查窗口存在状态出错: {e}")
         return False
 
 def active_game_window():
@@ -40,7 +64,7 @@ def active_game_window():
     try:
         windows = gw.getWindowsWithTitle(GAME_WINDOW_TITLE)
         if not windows:
-            print("[INFO] 未找到游戏窗口")
+            print("[DEBUG] 未找到游戏窗口")
             return False
         
         window = windows[0]
@@ -53,7 +77,7 @@ def active_game_window():
         window.activate()
         return True
     except Exception as e:
-        print(f"[INFO] 激活窗口出错: {e}")
+        print(f"[ERROR] 激活窗口出错: {e}")
         return False
 
 class WindowCapture:
@@ -71,7 +95,7 @@ class WindowCapture:
         if self.hwnd:
             print(f"[DEBUG] 找到窗口句柄: {self.hwnd}")
             return True
-        print(f"[WARNING] 未找到窗口: {self.window_title}")
+        print(f"[DEBUG] 未找到窗口: {self.window_title}")
         return False
 
     def capture_window(self):
@@ -79,7 +103,7 @@ class WindowCapture:
         try:
             # 确保窗口存在
             if not self.hwnd and not self._find_window():
-                print("[ERROR] 无法获取窗口句柄，截图失败")
+                print("[DEBUG] 无法获取窗口句柄，截图失败")
                 return None
                 
             print("[DEBUG] 开始捕获窗口图像")
@@ -98,7 +122,7 @@ class WindowCapture:
             # 使用PrintWindow捕获窗口内容
             result = windll.user32.PrintWindow(self.hwnd, saveDC.GetSafeHdc(), 0)
             if not result:
-                print("[WARNING] PrintWindow调用失败，尝试备选方案")
+                print("[DEBUG] PrintWindow调用失败，尝试备选方案")
                 # 备选方案：尝试使用BitBlt
                 saveDC.BitBlt((0, 0), (width, height), mfcDC, (0, 0), win32con.SRCCOPY)
 
@@ -132,7 +156,7 @@ class ImageProcessor:
         print("[INFO] 初始化图像处理器")
         self.template_dir = template_dir
         self.screen_width, self.screen_height = self._get_screen_resolution()
-        print(f"[DEBUG] 屏幕分辨率: {self.screen_width}x{self.screen_height}")
+        print(f"[INFO] 屏幕分辨率: {self.screen_width}x{self.screen_height}")
         self.template_cache = {}
         # 延迟初始化窗口捕获器
         self.window_capturer = None
@@ -198,7 +222,7 @@ class ImageProcessor:
     def _init_window_capturer(self):
         """初始化窗口捕获器（延迟初始化）"""
         if self.window_capturer is None:
-            print("[DEBUG] 初始化窗口捕获器")
+            print("[INFO] 初始化窗口捕获器")
             self.window_capturer = WindowCapture(GAME_WINDOW_TITLE)
         return self.window_capturer
 
@@ -208,7 +232,7 @@ class ImageProcessor:
         capturer = self._init_window_capturer()
         pil_img = capturer.capture_window()
         if pil_img is None:
-            print("[ERROR] 屏幕捕获失败")
+            print("[WARNING] 屏幕捕获失败")
             return None
         screen_np = np.array(pil_img)
         return cv2.cvtColor(screen_np, cv2.COLOR_RGB2GRAY)
@@ -266,7 +290,7 @@ class ImageProcessor:
             pyautogui.click(x, y)
             return True
 
-        print("[INFO] 未找到符合条件的匹配")
+        print("[DEBUG] 未找到符合条件的匹配")
         return False
 
     async def parse_qr_code(self, image_source='clipboard', config=None, bh_info=None):
@@ -276,13 +300,13 @@ class ImageProcessor:
         :return: 是否成功解析
         """
         try:
-            print(f"[DEBUG] 开始解析二维码，来源: {image_source}")
+            print(f"[INFO] 开始解析二维码，来源: {image_source}")
             
             if image_source == 'clipboard':
                 print("[DEBUG] 从剪贴板获取图像")
                 im = ImageGrab.grabclipboard()
                 if not isinstance(im, Image.Image):
-                    print("[INFO] 剪贴板中没有有效图像")
+                    print("[DEBUG] 剪贴板中没有有效图像")
                     return False
                     
             elif image_source == 'game_window':
@@ -290,7 +314,7 @@ class ImageProcessor:
                 capturer = self._init_window_capturer()
                 im = capturer.capture_window()
                 if im is None:
-                    print("[ERROR] 游戏窗口截图失败")
+                    print("[WARNING] 游戏窗口截图失败")
                     return False
                 im = im.convert('RGB')
             else:
@@ -299,13 +323,13 @@ class ImageProcessor:
 
             result = decode(im)
             if not result:
-                print("[INFO] 未检测到二维码")
+                print("[DEBUG] 未检测到二维码")
                 return False
 
             url = result[0].data.decode('utf-8')
             print(f"[DEBUG] 解码URL: {url}")
             if 'ticket=' not in url:
-                print("[INFO] 无效的二维码格式")
+                print("[DEBUG] 无效的二维码格式")
                 return False
 
             ticket = next((p.split('=')[1] for p in url.split('?')[1].split('&') 
@@ -315,7 +339,6 @@ class ImageProcessor:
                 print("[INFO] 检测到有效登录票据")
                 print("[INFO] 开始扫码验证")
                 await mihoyosdk.scanCheck(bh_info, ticket, config)
-                time.sleep(1)
                 self.clear_clipboard()
                 print("[INFO] 扫码验证完成")
                 return True
@@ -333,8 +356,8 @@ class ImageProcessor:
             if windll.user32.OpenClipboard(None):
                 windll.user32.EmptyClipboard()
                 windll.user32.CloseClipboard()
-                print("[INFO] 剪贴板已清空")
+                print("[DEBUG] 剪贴板已清空")
         except Exception as e:
-            print(f"[WARNING] 清空剪贴板出错: {e}")
+            print(f"[ERROR] 清空剪贴板出错: {e}")
 
 image_processor = ImageProcessor()

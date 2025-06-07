@@ -12,7 +12,7 @@ import asyncio
 from flask import Flask, abort, render_template, request
 
 # 第三方库 imports
-from PySide6.QtCore import QThread, Signal, QObject, QTimer, Qt
+from PySide6.QtCore import QThread, Signal, QTimer
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QApplication, QMainWindow, QFileDialog, QMessageBox
 
@@ -20,43 +20,8 @@ from PySide6.QtWidgets import QApplication, QMainWindow, QFileDialog, QMessageBo
 import bsgamesdk
 import mihoyosdk
 import mainWindow
-from image_processor import image_processor, is_game_window_exist
-
-def set_qt_env():
-    """设置 Qt 环境变量，解决打包后插件加载问题"""
-    if getattr(sys, 'frozen', False):
-        # 打包后模式：使用临时目录
-        base_dir = sys._MEIPASS
-    else:
-        # 开发模式：使用当前目录
-        base_dir = os.path.dirname(os.path.abspath(__file__))
-    
-    # 设置 Qt 插件路径
-    os.environ['QT_PLUGIN_PATH'] = os.path.join(base_dir, 'plugins')
-    os.environ['QML2_IMPORT_PATH'] = os.path.join(base_dir, 'qml')
-    
-    # 设置环境变量（解决 Windows 高 DPI 缩放问题）
-    os.environ["QT_ENABLE_HIGHDPI_SCALING"] = "1"
-    os.environ["QT_SCALE_FACTOR"] = "1"
-    QApplication.setHighDpiScaleFactorRoundingPolicy(
-        Qt.HighDpiScaleFactorRoundingPolicy.PassThrough
-    )
-
-# ========== EmittingStream 类：用于拦截 stdout 输出 ==========
-class EmittingStream(QObject):
-    textWritten = Signal(str)
-
-    def __init__(self):
-        super().__init__()
-        self.original_stdout = sys.stdout
-
-    def write(self, text):
-        self.original_stdout.write(text)
-        self.textWritten.emit(text)
-
-    def flush(self):
-        self.original_stdout.flush()
-        
+from bh3_utils import image_processor, is_game_window_exist
+from utils import set_qt_env, EmittingStream
 
 # ========== 全局变量 ==========
 m_cast_group_ip = '239.0.1.255'
@@ -236,7 +201,7 @@ class ParseThread(QThread):
                     else:
                         print("[DEBUG] 崩坏3窗口不存在，跳过自动截屏")
                 except Exception as e:
-                    print("[INFO] 自动截屏时出错: %s", str(e))
+                    print("[ERROR] 自动截屏时出错: %s", str(e))
             
             if config['clip_check'] and config.get('account_login', False):
                 await image_processor.parse_qr_code(image_source='clipboard', config=config, bh_info=bh_info)
@@ -246,7 +211,7 @@ class ParseThread(QThread):
 # ========== 登录按钮点击回调 ==========
 def login_accept():
     ui.backendLogin = LoginThread()
-    ui.backendLogin.update_log.connect(window.printLog)
+    ui.backendLogin.update_log.connect(print)
     ui.backendLogin.login_complete.connect(window.handle_login_complete)
     ui.backendLogin.start()
 
@@ -268,11 +233,6 @@ class SelfMainWindow(QMainWindow):
         self.prev_auto_clip = False
         self.prev_auto_close = False
         self.prev_auto_switch = False
-
-    @staticmethod
-    def printLog(msg):
-        print(msg)
-        ui.logText.append(msg)
 
     def handle_login_complete(self, success):
         """处理登录完成信号"""
@@ -365,8 +325,7 @@ class SelfMainWindow(QMainWindow):
         ui.autoSwitchModeCheck.setText("当前状态:启用")
         
         print("[INFO] 一键登录模式已启用")
-        print("[INFO] 已开启: 解析二维码, 自动截屏, 扫码完成后自动退出, 自动切换扫码模式")
-        print("[INFO] 这些设置仅在当前会话有效，不会写入配置文件")
+        print("[INFO] 已临时启用所有功能")
         
         QTimer.singleShot(120000, self.restoreOriginalSettings)
 
@@ -382,7 +341,7 @@ class SelfMainWindow(QMainWindow):
         ui.autoCloseCheck.setText("当前状态:启用" if self.prev_auto_close else "当前状态:关闭")
         ui.autoSwitchModeCheck.setText("当前状态:启用" if self.prev_auto_switch else "当前状态:关闭")
         
-        print("一键登录模式已结束，恢复原始设置")
+        print("[INFO] 一键登录模式已结束，即将恢复原始设置")
 
 
 def resource_path(relative_path):
@@ -421,7 +380,7 @@ if __name__ == '__main__':
         global cap
         cap = request.json
         ui.backendLogin = LoginThread()
-        ui.backendLogin.update_log.connect(window.printLog)
+        ui.backendLogin.update_log.connect(print)
         ui.backendLogin.login_complete.connect(window.handle_login_complete)
         ui.backendLogin.start()
         return "1"
@@ -439,7 +398,7 @@ if __name__ == '__main__':
         if config['account'] != '':
             print("[INFO] 配置文件已有账号，尝试登录中...")
             ui.backendLogin = LoginThread()
-            ui.backendLogin.update_log.connect(window.printLog)
+            ui.backendLogin.update_log.connect(print)
             ui.backendLogin.login_complete.connect(window.handle_login_complete)
             ui.backendLogin.start()
             
@@ -463,13 +422,13 @@ if __name__ == '__main__':
         print("[INFO] 配置文件异常，重置并跳过登录")
 
     ui.backendClipCheck = ParseThread()
-    ui.backendClipCheck.update_log.connect(window.printLog)
+    ui.backendClipCheck.update_log.connect(print)
     ui.backendClipCheck.start()
 
     # ========== 设置 stdout 重定向 ==========
     stream = EmittingStream()
     sys.stdout = stream
-    stream.textWritten.connect(lambda text: ui.logText.append(text) if text.startswith("[INFO]") else None)
+    stream.textWritten.connect(lambda text: ui.logText.append(text))
 
     window.show()
     

@@ -81,7 +81,7 @@ async def login1(account, password):
     data["validate"] = ""
     data["pwd"] = rsacr.rsacreate(rsa['hash'] + password, public_key)
     data = setSign(data)
-    print("[DEBUG] 正在尝试登录B站账号: " + account)
+    print("[INFO] 正在尝试登录B站账号: " + account)
     return await sendBiliPost(bililogin + "api/client/login", data)
 
 
@@ -100,7 +100,7 @@ async def login2(account, password, challenge, gt_user, validate):
     data["seccode"] = validate + "|jordan"
     data["pwd"] = rsacr.rsacreate(rsa['hash'] + password, public_key)
     data = setSign(data)
-    print("[DEBUG] 正在尝试二次登录B站账号: " + account)
+    print("[INFO] 正在尝试二次登录B站账号: " + account)
     return await sendBiliPost(bililogin + "api/client/login", data)
 
 

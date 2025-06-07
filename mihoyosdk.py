@@ -10,6 +10,7 @@ from PySide6.QtCore import QTimer
 from PySide6.QtWidgets import QApplication
 # 自定义库 imports
 from network_utils import sendGet, sendPost, sendGetRaw
+from bh3_utils import click_center_of_game_window
 
 url = 'https://api-sdk.mihoyo.com/bh3_cn/combo/granter/login/v2/login'
 verifyBody = '{"device":"0000000000000000","app_id":"1","channel_id":"14","data":{},"sign":""}'
@@ -43,7 +44,7 @@ def makeSign(data):
             continue
         data2 += f"{key}={data[key]}&"
     data2 = data2.rstrip('&').replace(' ', '')
-    # print(data2)
+    # print("[DEBUG]", data2, sep=" ")
     sign = bh3Sign(data2)
     data['sign'] = sign
     return data
@@ -58,7 +59,7 @@ async def getBHVer(cache_bh_ver=None):
     # print('[INFO] 云端版本号')
     if feedback == cache_bh_ver:
         local_bh_ver = cache_bh_ver['bh_ver']
-        print('获取版本号失败，使用缓存版本号')
+        print('[INFO] 获取版本号失败，使用缓存版本号')
     else:
         local_bh_ver = feedback['version']
     has_bh_ver = True
@@ -77,15 +78,15 @@ async def getOAServer(oa_token):
     param = f'version={bh_ver}_gf_android_bilibili&token={oa_token}'
     dispatch = await sendGetRaw(oa_main_url + param, '')
 
-    # print(feedback)
+    # print("[DEBUG]", feedback, sep=" ")
 
-    # print(dispatch_url)
+    # print("[DEBUG]", dispatch_url, sep=" ")
     # dispatch = await sendOAGet(bh_ver, openid)
 
     has_dispatch = True
 
     local_dispatch = dispatch
-    # print(dispatch)
+    # print("[DEBUG]", dispatch, sep=" ")
     return dispatch
 
 
@@ -106,7 +107,7 @@ async def scanCheck(bh_info, ticket, config):
 
 async def scanConfirm(bhinfoR, ticket, config):
     bhinfo = bhinfoR['data']
-    # print(bhinfo)
+    # print("[DEBUG]", bhinfo, sep=" ")
     scan_result = json.loads(scanResultR)
     scan_data = json.loads(scanDataR)
     dispatch = await getOAServer(bhinfo['open_id'])
@@ -127,32 +128,30 @@ async def scanConfirm(bhinfoR, ticket, config):
     scan_result['ticket'] = ticket
     scan_result = makeSign(scan_result)
     post_body = json.dumps(scan_result).replace(' ', '')
-    # print(post_body)
+    # print("[DEBUG]", post_body, sep=" ")
     feedback = await sendPost('https://api-sdk.mihoyo.com/bh3_cn/combo/panda/qrcode/confirm', post_body)
     if feedback['retcode'] == 0:
         print('[INFO] 扫码成功！')
         if config['auto_close']:
             print('[INFO] 已启用自动退出')
             print('[INFO] 3秒后将自动关闭扫码器')
-            # 使用 QTimer 延迟关闭 GUI（不会阻塞事件循环）
-            QTimer.singleShot(3000, QApplication.instance().quit)
             asyncio.sleep(3)
-            sys.exit()
-
+            click_center_of_game_window()
+            QApplication.instance().quit
     else:
         print('[INFO] 扫码失败！')
         print("[INFO]", feedback)
 
 
 async def verify(uid, access_key):
-    print(f'verify with uid={uid}')
+    print("[DEBUG]", f'verify with uid={uid}', sep=" ")
     data = json.loads(verifyData)
     data['uid'] = uid
     data['access_key'] = access_key
     body = json.loads(verifyBody)
     body['data'] = json.dumps(data)
-    # print(json.dumps(body))
+    # print("[DEBUG]", json.dumps(body, sep=" "))
     body = makeSign(body)
-    # print(json.dumps(body))
+    # print("[DEBUG]", json.dumps(body, sep=" "))
     feedback = await sendPost(url, json.dumps(body).replace(' ', ''))
     return feedback
