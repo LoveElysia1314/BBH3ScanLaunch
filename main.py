@@ -11,7 +11,8 @@ from threading import Thread
 import asyncio
 from flask import Flask, abort, render_template, request
 # 第三方库 imports
-from PyQt6.QtCore import QThread, pyqtSignal, QObject, Qt, QTimer
+from PyQt6.QtCore import QThread, pyqtSignal, QObject, QTimer
+from PyQt6.QtGui import QIcon
 from PyQt6.QtWidgets import QApplication, QMainWindow, QFileDialog, QMessageBox
 
 # 自定义模块 imports
@@ -252,6 +253,7 @@ def deal_account(string):
 class SelfMainWindow(QMainWindow):
     def __init__(self, parent=None):
         super(SelfMainWindow, self).__init__(parent)
+        self.setWindowIcon(QIcon(r".\BHimage.ico"))
         self.prev_clip_check = False
         self.prev_auto_clip = False
         self.prev_auto_close = False
@@ -372,10 +374,36 @@ class SelfMainWindow(QMainWindow):
         
         print("一键登录模式已结束，恢复原始设置")
 
+
+def resource_path(relative_path):
+    """获取资源绝对路径，支持开发模式和PyInstaller单文件模式"""
+    if getattr(sys, 'frozen', False):
+        base_path = getattr(sys, '_MEIPASS', os.path.dirname(os.path.abspath(__file__)))
+        return os.path.join(base_path, relative_path)
+    return os.path.join(os.path.dirname(os.path.abspath(__file__)), relative_path)
+
 # ========== Flask 启动 ==========
 if __name__ == '__main__':
-    QApplication.setHighDpiScaleFactorRoundingPolicy(
-        Qt.HighDpiScaleFactorRoundingPolicy.PassThrough)
+
+    # ============ 解决Qt插件问题 ============
+    if getattr(sys, 'frozen', False):
+        base_dir = sys._MEIPASS
+        plugin_path = os.path.join(base_dir, 'qt6_plugins')
+        
+        # 设置环境变量
+        os.environ['QT_PLUGIN_PATH'] = plugin_path
+        if sys.platform == 'win32':
+            os.add_dll_directory(plugin_path)
+            os.environ['QT_QPA_PLATFORM_PLUGIN_PATH'] = os.path.join(plugin_path, 'platforms')
+    
+    # ============ 解决工作目录问题 ============
+    # 获取可执行文件真实目录
+    if getattr(sys, 'frozen', False):
+        app_dir = os.path.dirname(sys.argv[0])
+        # 切换到可执行文件所在目录（可选）
+        os.chdir(app_dir)
+
+
     init_conf()
 
     auto_login = False

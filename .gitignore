@@ -20,6 +20,6 @@ Thumbs.db
 *.pyd
 *.dll
 main.dist/Crypto/Util/.keep_dir.txt
-main.dist/PyQt5/Qt/.keep_dir.txt
-main.dist/PyQt5/Qt5/.keep_dir.txt
+main.dist/PyQt6/Qt/.keep_dir.txt
+main.dist/PyQt6/Qt6/.keep_dir.txt
 *.exe
