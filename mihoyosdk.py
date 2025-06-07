@@ -1,11 +1,14 @@
+# 标准库 imports
 import hashlib
 import hmac
 import json
+import sys
 import time
 import asyncio
+# 第三方库 imports
 from PyQt6.QtCore import QTimer
 from PyQt6.QtWidgets import QApplication
-
+# 自定义库 imports
 from network_utils import sendGet, sendPost, sendGetRaw
 
 url = 'https://api-sdk.mihoyo.com/bh3_cn/combo/granter/login/v2/login'
@@ -133,7 +136,6 @@ async def scanConfirm(bhinfoR, ticket, config):
             print('[INFO] 3秒后将自动关闭扫码器')
             # 使用 QTimer 延迟关闭 GUI（不会阻塞事件循环）
             QTimer.singleShot(3000, QApplication.instance().quit)
-            import sys
             asyncio.sleep(3)
             sys.exit()
 

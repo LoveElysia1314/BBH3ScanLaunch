@@ -1,8 +1,5 @@
 import asyncio
-import hmac
-import hashlib
 import requests
-import time
 
 # 使用标准 print 输出日志
 def print_log(msg, level="INFO"):

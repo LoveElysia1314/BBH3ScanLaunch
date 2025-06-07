@@ -1,18 +1,35 @@
 # -*- coding: utf-8 -*-
-import sys
-import asyncio
+# 标准库 imports
 import json
-import os.path
+from json.decoder import JSONDecodeError
+import os
+import subprocess
+import sys
 import time
 import webbrowser
-from json.decoder import JSONDecodeError
 from threading import Thread
+import asyncio
+from flask import Flask, abort, render_template, request
+# 第三方库 imports
 from PyQt6.QtCore import QThread, pyqtSignal, QObject, Qt, QTimer
 from PyQt6.QtWidgets import QApplication, QMainWindow, QFileDialog, QMessageBox
-import subprocess
+
+# 自定义模块 imports
+import bsgamesdk
+import mihoyosdk
 import mainWindow
 from image_processor import image_processor, is_game_window_exist
-from flask import Flask, abort, render_template, request
+
+# 解决打包后Qt插件加载问题
+if getattr(sys, 'frozen', False):
+    # 单文件打包模式
+    plugin_path = os.path.join(sys._MEIPASS, 'qt6_plugins')
+    os.environ['QT_PLUGIN_PATH'] = plugin_path
+    os.environ['QT_QPA_PLATFORM_PLUGIN_PATH'] = os.path.join(plugin_path, 'platforms')
+    
+    # 添加插件路径到库搜索路径
+    if sys.platform == 'win32':
+        os.add_dll_directory(plugin_path)
 
 # ========== EmittingStream 类：用于拦截 stdout 输出 ==========
 class EmittingStream(QObject):
@@ -95,7 +112,6 @@ class LoginThread(QThread):
         global config, bh_info, cap
         print("[INFO] 登录B站账号中...")
         try:
-            import bsgamesdk
             if config['last_login_succ']:
                 print(f"[INFO] 验证缓存账号 {config['uname']} 中...")
                 bs_user_info = await bsgamesdk.getUserInfo(config['uid'], config['access_key'])
@@ -135,7 +151,6 @@ class LoginThread(QThread):
                 write_conf(config)
             
             print("[INFO] 登录崩坏3账号中...")
-            import mihoyosdk
             bh_info = await mihoyosdk.verify(bs_info['uid'], bs_info['access_key'])
             if bh_info['retcode'] != 0:
                 print("[INFO] 登录失败！")

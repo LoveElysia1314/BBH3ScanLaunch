@@ -1,24 +1,22 @@
 # -*- coding: utf-8 -*-
-"""
-崩坏3自动登录图像处理模块 - 优化版
-主要优化：
-1. 解决目标窗口不存在时的初始化问题
-2. 添加窗口查找重试机制
-3. 优化错误处理和日志
-"""
-
+# 标准库 imports
 import os
+import re
 import time
+# 第三方库 imports
 import cv2
 import numpy as np
+from ctypes import windll
+from PIL import Image, ImageGrab
+import pyautogui
 import pygetwindow as gw
 from pyzbar.pyzbar import decode
-from PIL import Image, ImageGrab
-from ctypes import windll
-import re
+from screeninfo import get_monitors
+import win32con
 import win32gui
 import win32ui
-import win32con
+# 自定义库 imports
+import mihoyosdk
 
 # 常量定义
 TEMPLATE_DIR = "Pictures_to_Match"
@@ -142,7 +140,6 @@ class ImageProcessor:
 
     def _get_screen_resolution(self):
         """获取当前屏幕分辨率"""
-        from screeninfo import get_monitors
         return get_monitors()[0].width, get_monitors()[0].height
 
     def _get_resolution_from_filename(self, filename):
@@ -265,7 +262,6 @@ class ImageProcessor:
             x = max(0, min(x, self.screen_width - 1))
             y = max(0, min(y, self.screen_height - 1))
             active_game_window()
-            import pyautogui
             print(f"[INFO] 点击匹配位置: {template_name} @ ({x}, {y}), 置信度: {confidence:.2f}")
             pyautogui.click(x, y)
             return True
@@ -317,7 +313,6 @@ class ImageProcessor:
 
             if ticket and config and bh_info:
                 print("[INFO] 检测到有效登录票据")
-                import mihoyosdk
                 print("[INFO] 开始扫码验证")
                 await mihoyosdk.scanCheck(bh_info, ticket, config)
                 time.sleep(1)
