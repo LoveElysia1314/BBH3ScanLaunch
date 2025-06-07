@@ -10,10 +10,11 @@ import webbrowser
 from threading import Thread
 import asyncio
 from flask import Flask, abort, render_template, request
+
 # 第三方库 imports
-from PyQt6.QtCore import QThread, pyqtSignal, QObject, QTimer
-from PyQt6.QtGui import QIcon
-from PyQt6.QtWidgets import QApplication, QMainWindow, QFileDialog, QMessageBox
+from PySide6.QtCore import QThread, Signal, QObject, QTimer, Qt
+from PySide6.QtGui import QIcon
+from PySide6.QtWidgets import QApplication, QMainWindow, QFileDialog, QMessageBox
 
 # 自定义模块 imports
 import bsgamesdk
@@ -21,20 +22,29 @@ import mihoyosdk
 import mainWindow
 from image_processor import image_processor, is_game_window_exist
 
-# 解决打包后Qt插件加载问题
-if getattr(sys, 'frozen', False):
-    # 单文件打包模式
-    plugin_path = os.path.join(sys._MEIPASS, 'qt6_plugins')
-    os.environ['QT_PLUGIN_PATH'] = plugin_path
-    os.environ['QT_QPA_PLATFORM_PLUGIN_PATH'] = os.path.join(plugin_path, 'platforms')
+def set_qt_env():
+    """设置 Qt 环境变量，解决打包后插件加载问题"""
+    if getattr(sys, 'frozen', False):
+        # 打包后模式：使用临时目录
+        base_dir = sys._MEIPASS
+    else:
+        # 开发模式：使用当前目录
+        base_dir = os.path.dirname(os.path.abspath(__file__))
     
-    # 添加插件路径到库搜索路径
-    if sys.platform == 'win32':
-        os.add_dll_directory(plugin_path)
+    # 设置 Qt 插件路径
+    os.environ['QT_PLUGIN_PATH'] = os.path.join(base_dir, 'plugins')
+    os.environ['QML2_IMPORT_PATH'] = os.path.join(base_dir, 'qml')
+    
+    # 设置环境变量（解决 Windows 高 DPI 缩放问题）
+    os.environ["QT_ENABLE_HIGHDPI_SCALING"] = "1"
+    os.environ["QT_SCALE_FACTOR"] = "1"
+    QApplication.setHighDpiScaleFactorRoundingPolicy(
+        Qt.HighDpiScaleFactorRoundingPolicy.PassThrough
+    )
 
 # ========== EmittingStream 类：用于拦截 stdout 输出 ==========
 class EmittingStream(QObject):
-    textWritten = pyqtSignal(str)
+    textWritten = Signal(str)
 
     def __init__(self):
         super().__init__()
@@ -103,8 +113,8 @@ def write_conf(old=None):
 
 # ========== 登录线程 ==========
 class LoginThread(QThread):
-    update_log = pyqtSignal(str)
-    login_complete = pyqtSignal(bool)  # 新增登录完成信号
+    update_log = Signal(str)
+    login_complete = Signal(bool)  # 新增登录完成信号
 
     def run(self):
         asyncio.run(self.login())
@@ -203,7 +213,7 @@ class LoginThread(QThread):
 
 # ========== 解析线程 ==========
 class ParseThread(QThread):
-    update_log = pyqtSignal(str)
+    update_log = Signal(str)
 
     def run(self):
         asyncio.run(self.check())
@@ -384,26 +394,7 @@ def resource_path(relative_path):
 
 # ========== Flask 启动 ==========
 if __name__ == '__main__':
-
-    # ============ 解决Qt插件问题 ============
-    if getattr(sys, 'frozen', False):
-        base_dir = sys._MEIPASS
-        plugin_path = os.path.join(base_dir, 'qt6_plugins')
-        
-        # 设置环境变量
-        os.environ['QT_PLUGIN_PATH'] = plugin_path
-        if sys.platform == 'win32':
-            os.add_dll_directory(plugin_path)
-            os.environ['QT_QPA_PLATFORM_PLUGIN_PATH'] = os.path.join(plugin_path, 'platforms')
-    
-    # ============ 解决工作目录问题 ============
-    # 获取可执行文件真实目录
-    if getattr(sys, 'frozen', False):
-        app_dir = os.path.dirname(sys.argv[0])
-        # 切换到可执行文件所在目录（可选）
-        os.chdir(app_dir)
-
-
+    set_qt_env()  # 必须在创建 QApplication 前调用
     init_conf()
 
     auto_login = False

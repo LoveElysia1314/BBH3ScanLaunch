@@ -6,8 +6,8 @@ import sys
 import time
 import asyncio
 # 第三方库 imports
-from PyQt6.QtCore import QTimer
-from PyQt6.QtWidgets import QApplication
+from PySide6.QtCore import QTimer
+from PySide6.QtWidgets import QApplication
 # 自定义库 imports
 from network_utils import sendGet, sendPost, sendGetRaw
 

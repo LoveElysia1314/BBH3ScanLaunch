@@ -5,14 +5,14 @@ setlocal enabledelayedexpansion
 set "SCRIPT_DIR=%~dp0"
 
 :: 自动获取Qt插件路径（使用短路径避免空格问题）
-for /f "delims=" %%i in ('python -c "from PyQt6.QtCore import QLibraryInfo; import os; path = QLibraryInfo.path(QLibraryInfo.LibraryPath.PluginsPath); print(os.path.normpath(path))"') do (
+for /f "delims=" %%i in ('python -c "from PySide6.QtCore import QLibraryInfo; import os; path = QLibraryInfo.path(QLibraryInfo.LibraryPath.PluginsPath); print(os.path.normpath(path))"') do (
     set "QT_PLUGINS=%%~fi"
 )
 
 :: 检查是否找到Qt插件路径
 if not defined QT_PLUGINS (
     echo 错误：未找到Qt插件路径！
-    echo 请确保PyQt6已正确安装
+    echo 请确保PySide6已正确安装
     exit /b 1
 )
 
@@ -35,15 +35,15 @@ for %%s in (%PLUGIN_SUBDIRS%) do (
 )
 
 :: 编译命令
-nuitka --standalone --onefile ^
+nuitka --standalone^
 	--standalone --output-dir=dist ^
        --output-filename=BBH3ScanLaunch.exe ^
        --windows-icon-from-ico="%SCRIPT_DIR%BHimage.ico" ^
        --windows-console-mode=disable ^
-       --enable-plugin=pyqt6 ^
-       --include-package=PyQt6.QtWidgets ^
-       --include-package=PyQt6.QtGui ^
-       --include-package=PyQt6.QtCore ^
+       --enable-plugin=pyside6 ^
+       --include-package=PySide6.QtWidgets ^
+       --include-package=PySide6.QtGui ^
+       --include-package=PySide6.QtCore ^
        --windows-disable-console ^
        --remove-output ^
        --assume-yes-for-downloads ^

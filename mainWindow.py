@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
-from PyQt6 import QtCore, QtWidgets
-from PyQt6.QtCore import Qt
-from PyQt6.QtWidgets import (QDialog, QDialogButtonBox, QLabel, QLineEdit,
+from PySide6 import QtCore, QtWidgets
+from PySide6.QtCore import Qt
+from PySide6.QtWidgets import (QDialog, QDialogButtonBox, QLabel, QLineEdit,
                              QVBoxLayout, QHBoxLayout, QTextBrowser)
 
 class LoginDialog(QDialog):
