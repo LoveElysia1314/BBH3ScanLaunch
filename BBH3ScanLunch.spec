@@ -4,7 +4,7 @@
 a = Analysis(
     ['main.py'],
     pathex=[],
-    binaries=[],
+    binaries=[('\\Lib\\site-packages\\PySide6\\Qt6Core.dll', '.'), ('\\Lib\\site-packages\\PySide6\\Qt6Gui.dll', '.'), ('\\Lib\\site-packages\\PySide6\\Qt6Widgets.dll', '.'), ('\\Lib\\site-packages\\PySide6\\plugins\\platforms\\qwindows.dll', 'platforms'), ('\\Lib\\site-packages\\PySide6\\plugins\\imageformats\\qjpeg.dll', 'imageformats'), ('\\Lib\\site-packages\\PySide6\\plugins\\imageformats\\qgif.dll', 'imageformats')],
     datas=[],
     hiddenimports=[],
     hookspath=[],
