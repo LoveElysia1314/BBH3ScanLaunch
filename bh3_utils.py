@@ -40,7 +40,7 @@ def click_center_of_game_window():
             print("[INFO] 未找到任何激活窗口。")
             return
         # 获取窗口的位置和尺寸
-        left, top, width, height = active_window.left, active_window.top, active_window.width, active_window.heigh
+        left, top, width, height = active_window.left, active_window.top, active_window.width, active_window.height
         # 计算中心点坐标
         center_x = left + width // 2
         center_y = top + height // 2
