@@ -37,33 +37,55 @@ class EmittingStream(QObject):
     def __init__(self):
         super().__init__()
         self.original_stdout = sys.stdout
-        self._buffer = ""  # 用于缓存未完成的一行
+        self._buffer = ""
+
+        # 控制选项
+        self.show_debug_gui = False     # 是否在 GUI 中显示 DEBUG
+        self.show_debug_terminal = False  # 是否在终端中显示 DEBUG
 
     def write(self, text):
-        self.original_stdout.write(text)
-        # 将新文本追加到缓冲区
+        # 先缓存文本
         self._buffer += text
-        # 检查是否有完整行（以换行符结尾）
+
+        # 如果有换行符，则处理每一行
         if '\n' in self._buffer:
             lines = self._buffer.split('\n')
-            self._buffer = lines[-1]  # 最后一个是不完整的部分（或空字符串）
+            self._buffer = lines[-1]  # 最后一行可能是未完成的
+
             for line in lines[:-1]:
                 full_line = line
-                # 过滤 [DEBUG] 开头的行
-                if full_line.startswith("[DEBUG]"):
-                    continue
-                # 添加来源信息
-#                source_info = self.get_caller_info()
-#                formatted_line = f"{source_info} {full_line}"
-                formatted_line = full_line
-                # 发送信号
-                self.textWritten.emit(formatted_line)
+
+                # 判断是否是 DEBUG 行
+                is_debug = full_line.startswith("[DEBUG]")
+
+                # 决定是否发送到 GUI
+                if self.show_debug_gui or not is_debug:
+                    self.textWritten.emit(full_line)
+
+                # 决定是否输出到终端
+                if self.show_debug_terminal or not is_debug:
+                    self.original_stdout.write(full_line + '\n')  # 添加换行，因为 split 已经去掉了
+
+    def flush(self):
+        # 处理缓冲区最后的内容（可能没有换行）
+        if self._buffer:
+            full_line = self._buffer
+            self._buffer = ""
+            is_debug = full_line.startswith("[DEBUG]")
+
+            # 发送到 GUI
+            if self.show_debug_gui or not is_debug:
+                self.textWritten.emit(full_line)
+
+            # 输出到终端
+            if self.show_debug_terminal or not is_debug:
+                self.original_stdout.write(full_line)
+        
+        self.original_stdout.flush()
 
     def get_caller_info(self):
-        """获取调用 print 的位置信息"""
         frame = inspect.currentframe()
         try:
-            # 跳过前两层：write -> print -> 用户代码
             outer_frame = frame.f_back.f_back
             filename = outer_frame.f_code.co_filename
             lineno = outer_frame.f_lineno
@@ -72,17 +94,3 @@ class EmittingStream(QObject):
         finally:
             del frame
 
-    def flush(self):
-        if self._buffer:
-            # 处理最后的残余内容（没有换行的情况）
-            full_line = self._buffer
-            self._buffer = ""
-
-            if full_line.startswith("[DEBUG]"):
-                return
-
-            source_info = self.get_caller_info()
-            formatted_line = f"{source_info} {full_line}"
-            self.textWritten.emit(formatted_line)
-
-        self.original_stdout.flush()

@@ -1,6 +1,7 @@
 # config_utils.py
 import json
 import os
+import threading
 from json.decoder import JSONDecodeError
 
 class ConfigManager:
@@ -24,6 +25,7 @@ class ConfigManager:
     }
 
     def __init__(self):
+        self.lock = threading.Lock()  # 线程安全锁
         self.m_cast_group_ip = '239.0.1.255'
         self.m_cast_group_port = 12585
         self.bh_info = {}
@@ -55,18 +57,16 @@ class ConfigManager:
 
     def write_conf(self, old=None):
         """写入配置文件"""
-        config_temp = self.DEFAULT_CONFIG.copy()
-        
-        if old is not None:
-            for key in config_temp:
-                if key in old:
-                    config_temp[key] = old[key]
-        
-        config_temp['ver'] = self.DEFAULT_CONFIG['ver']
-        
-        with open('./config.json', 'w') as f:
-            json.dump(config_temp, f, indent=4, separators=(',', ': '))
-        return config_temp
-
-# 全局配置实例（单例模式）
-config_manager = ConfigManager()
+        with self.lock:  # 加锁确保线程安全
+            config_temp = dict(self.DEFAULT_CONFIG)  # 深拷贝避免引用共享
+            
+            if old is not None:
+                for key in config_temp:
+                    if key in old:
+                        config_temp[key] = old[key]
+            
+            config_temp['ver'] = self.DEFAULT_CONFIG['ver']
+            
+            with open('./config.json', 'w') as f:
+                json.dump(config_temp, f, indent=4, separators=(',', ': '))
+            self.config = config_temp  # 同步内存中的配置

@@ -25,20 +25,15 @@ from bh3_utils import image_processor, is_game_window_exist
 from utils import set_qt_env, EmittingStream
 
 # 导入配置管理器
-from config_utils import config_manager
+from config_utils import ConfigManager
 
-# ========== 替代全局变量 ==========
-m_cast_group_ip = config_manager.m_cast_group_ip
-m_cast_group_port = config_manager.m_cast_group_port
-config = config_manager.config
-bh_info = config_manager.bh_info
-data = config_manager.data
-cap = config_manager.cap
+# ========== 初始化配置管理器 ==========
+config_manager = ConfigManager()  # 单例模式
 
 # ========== 登录线程 ==========
 class LoginThread(QThread):
     update_log = Signal(str)
-    login_complete = Signal(bool)  # 新增登录完成信号
+    login_complete = Signal(bool)
     
     def run(self):
         asyncio.run(self.login())
@@ -46,6 +41,7 @@ class LoginThread(QThread):
     async def login(self):
         print("[INFO] 登录B站账号中...")
         try:
+            config = config_manager.config  # 获取当前配置
             if config['last_login_succ']:
                 print(f"[INFO] 验证缓存账号 {config['uname']} 中...")
                 bs_user_info = await bsgamesdk.getUserInfo(config['uid'], config['access_key'])
@@ -60,7 +56,7 @@ class LoginThread(QThread):
                     config_manager.write_conf(config)
             else:
                 print(f"[INFO] 登录B站账号 {config['account']} 中...")
-                bs_info = await bsgamesdk.login(config['account'], config['password'], cap)
+                bs_info = await bsgamesdk.login(config['account'], config['password'], config_manager.cap)
                 if "access_key" not in bs_info:
                     self.handle_login_failure(bs_info)
                     return
@@ -73,10 +69,11 @@ class LoginThread(QThread):
                 config_manager.write_conf(config)
             
             print("[INFO] 登录崩坏3账号中...")
-            bh_info_new = await mihoyosdk.verify(bs_info['uid'], bs_info['access_key'])
-            if bh_info_new['retcode'] != 0:
+            bh_info = await mihoyosdk.verify(bs_info['uid'], bs_info['access_key'])
+            config_manager.bh_info = bh_info  # 更新 bh_info
+            if bh_info['retcode'] != 0:
                 print("[INFO] 登录失败！")
-                print("[INFO]" + str(bh_info_new))
+                print("[INFO]" + str(bh_info))
                 self.login_complete.emit(False)
                 return
             
@@ -132,6 +129,7 @@ class ParseThread(QThread):
     
     async def check(self):
         while True:
+            config = config_manager.config
             if config['auto_close'] and config['auto_switch_mode']:
                 if is_game_window_exist():
                     image_processor.match_and_click()
@@ -142,13 +140,21 @@ class ParseThread(QThread):
                     if is_game_window_exist():
                         screenshot = image_processor.capture_screen()
                         if screenshot is not None:
-                            await image_processor.parse_qr_code(image_source='game_window', config=config, bh_info=bh_info)
+                            await image_processor.parse_qr_code(
+                                image_source='game_window',
+                                config=config,
+                                bh_info=config_manager.bh_info
+                            )
                     else:
                         print("[DEBUG] 崩坏3窗口不存在，跳过自动截屏")
                 except Exception as e:
                     print("[ERROR] 自动截屏时出错: %s", str(e))
             if config['clip_check'] and config.get('account_login', False):
-                await image_processor.parse_qr_code(image_source='clipboard', config=config, bh_info=bh_info)
+                await image_processor.parse_qr_code(
+                    image_source='clipboard',
+                    config=config,
+                    bh_info=config_manager.bh_info
+                )
             time.sleep(config['sleep_time'])
 
 # ========== 登录按钮点击回调 ==========
@@ -158,27 +164,26 @@ def login_accept():
     ui.backendLogin.login_complete.connect(window.handle_login_complete)
     ui.backendLogin.start()
 
-# ========== 账号/密码输入回调 ==========
-def deal_password(string):
-    config['password'] = string
-    config_manager.write_conf(config)
 
-def deal_account(string):
-    config['account'] = string
-    config_manager.write_conf(config)
+# ========== 登录按钮点击回调 ==========
+def login_accept():
+    global config, bh_info, cap
+    ui.backendLogin = LoginThread()
+    ui.backendLogin.update_log.connect(print)
+    ui.backendLogin.login_complete.connect(window.handle_login_complete)
+    ui.backendLogin.start()
 
 # ========== 主窗口类 ==========
 class SelfMainWindow(QMainWindow):
     def __init__(self, parent=None):
         super(SelfMainWindow, self).__init__(parent)
         self.setWindowIcon(QIcon(r".\BHimage.ico"))
-        self.prev_clip_check = config['clip_check']
-        self.prev_auto_clip = config['auto_clip']
-        self.prev_auto_close = config['auto_close']
-        self.prev_auto_switch = config.get('auto_switch_mode', False)
+        self.prev_clip_check = config_manager.config['clip_check']
+        self.prev_auto_clip = config_manager.config['auto_clip']
+        self.prev_auto_close = config_manager.config['auto_close']
+        self.prev_auto_switch = config_manager.config.get('auto_switch_mode', False)
     
     def handle_login_complete(self, success):
-        """处理登录完成信号"""
         if success:
             ui.loginBiliBtn.setText("账号已登录")
             ui.loginBiliBtn.setDisabled(False)
@@ -187,6 +192,7 @@ class SelfMainWindow(QMainWindow):
             ui.loginBiliBtn.setDisabled(False)
     
     def login(self):
+        config = config_manager.config
         if config.get('account_login', False):
             print("[INFO] 账号已登录")
             ui.loginBiliBtn.setText("账号已登录")
@@ -195,16 +201,27 @@ class SelfMainWindow(QMainWindow):
         ui.loginBiliBtn.setText("登陆中")
         ui.loginBiliBtn.setDisabled(True)
         dialog = mainWindow.LoginDialog(window)
-        dialog.account.textChanged.connect(deal_account)
-        dialog.password.textChanged.connect(deal_password)
+        dialog.account.textChanged.connect(self.deal_account)
+        dialog.password.textChanged.connect(self.deal_password)
         dialog.show()
         dialog.accepted.connect(login_accept)
+    
+    def deal_account(self, string):
+        config = config_manager.config
+        config['account'] = string
+        config_manager.write_conf(config)
+    
+    def deal_password(self, string):
+        config = config_manager.config
+        config['password'] = string
+        config_manager.write_conf(config)
     
     def qrCodeSwitch(self, boolean):
         if boolean:
             ui.clipCheck.setText("当前状态:启用")
         else:
             ui.clipCheck.setText("当前状态:关闭")
+        config = config_manager.config
         config['clip_check'] = boolean
         config_manager.write_conf(config)
     
@@ -213,6 +230,7 @@ class SelfMainWindow(QMainWindow):
             ui.autoCloseCheck.setText("当前状态:启用")
         else:
             ui.autoCloseCheck.setText("当前状态:关闭")
+        config = config_manager.config
         config['auto_close'] = boolean
         config_manager.write_conf(config)
     
@@ -221,6 +239,7 @@ class SelfMainWindow(QMainWindow):
             ui.autoClipCheck.setText("当前状态:启用")
         else:
             ui.autoClipCheck.setText("当前状态:关闭")
+        config = config_manager.config
         config['auto_clip'] = boolean
         config_manager.write_conf(config)
     
@@ -229,17 +248,20 @@ class SelfMainWindow(QMainWindow):
             ui.autoSwitchModeCheck.setText("当前状态:启用")
         else:
             ui.autoSwitchModeCheck.setText("当前状态:关闭")
+        config = config_manager.config
         config['auto_switch_mode'] = boolean
         config_manager.write_conf(config)
     
     def configGamePath(self):
         filePath, _ = QFileDialog.getOpenFileName(window, "选择崩坏3执行文件", "", "Executable Files (*.exe)")
         if filePath:
+            config = config_manager.config
             config['game_path'] = filePath
             config_manager.write_conf(config)
             ui.configGamePathBtn.setText("路径已配置")
     
     def launchGame(self):
+        config = config_manager.config
         if 'game_path' in config and config['game_path']:
             try:
                 subprocess.Popen([config['game_path']])
@@ -253,6 +275,7 @@ class SelfMainWindow(QMainWindow):
     def oneClickLogin(self):
         """一键登录功能"""
         self.launchGame()
+        config = config_manager.config
         config['clip_check'] = True
         config['auto_clip'] = True
         config['auto_close'] = True
@@ -267,7 +290,7 @@ class SelfMainWindow(QMainWindow):
         QTimer.singleShot(120000, self.restoreOriginalSettings)
     
     def restoreOriginalSettings(self):
-        """恢复原始设置"""
+        config = config_manager.config
         config['clip_check'] = self.prev_clip_check
         config['auto_clip'] = self.prev_auto_clip
         config['auto_close'] = self.prev_auto_close
@@ -279,21 +302,16 @@ class SelfMainWindow(QMainWindow):
         ui.autoSwitchModeCheck.setText("当前状态:启用" if self.prev_auto_switch else "当前状态:关闭")
         print("[INFO] 一键登录模式已结束，即将恢复原始设置")
 
-def resource_path(relative_path):
-    """获取资源绝对路径，支持开发模式和PyInstaller单文件模式"""
-    if getattr(sys, 'frozen', False):
-        base_path = getattr(sys, '_MEIPASS', os.path.dirname(os.path.abspath(__file__)))
-        return os.path.join(base_path, relative_path)
-    return os.path.join(os.path.dirname(os.path.abspath(__file__)), relative_path)
-
 # ========== Flask 启动 ==========
 if __name__ == '__main__':
-    set_qt_env()  # 必须在创建 QApplication 前调用
 
-    auto_login = False
-    if len(sys.argv) > 1 and sys.argv[1] == '--auto-login':
-        auto_login = True
-        print("[INFO] 检测到自动登录参数，将启动一键登录模式")
+    # ========== 设置 stdout 重定向 ==========
+    stream = EmittingStream()
+    sys.stdout = stream
+    stream.textWritten.connect(lambda text: ui.logText.append(text))
+
+    #初始化配置
+    set_qt_env()
     
     fapp = Flask(__name__)
     @fapp.route("/")
@@ -310,9 +328,7 @@ if __name__ == '__main__':
             print("[INFO] 请求错误")
             abort(400)
         print("[INFO] Input = " + str(request.json))
-        global cap
-        cap = request.json
-        config_manager.cap = cap  # 同步到配置管理器
+        config_manager.cap = request.json  # 更新 cap
         ui.backendLogin = LoginThread()
         ui.backendLogin.update_log.connect(print)
         ui.backendLogin.login_complete.connect(window.handle_login_complete)
@@ -329,6 +345,7 @@ if __name__ == '__main__':
     ui.setupUi(window)
     
     try:
+        config = config_manager.config
         if config['account'] != '':
             print("[INFO] 配置文件已有账号，尝试登录中...")
             ui.backendLogin = LoginThread()
@@ -358,14 +375,12 @@ if __name__ == '__main__':
     ui.backendClipCheck.update_log.connect(print)
     ui.backendClipCheck.start()
     
-    # ========== 设置 stdout 重定向 ==========
-    stream = EmittingStream()
-    sys.stdout = stream
-    stream.textWritten.connect(lambda text: ui.logText.append(text))
-    
+    #显示窗口
     window.show()
-    
-    if auto_login:
-        QTimer.singleShot(1000, window.oneClickLogin)
-    
+    print(sys.argv)
+    if '--auto-login' in sys.argv:
+        window.oneClickLogin
+        print("[INFO] 检测到自动登录参数，将启动一键登录模式")
+    else:
+        print("NO")
     sys.exit(app.exec())
