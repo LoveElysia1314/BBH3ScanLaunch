@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 # 标准库 imports
+import asyncio
 import os
 import re
 import time
@@ -286,6 +287,7 @@ class ImageProcessor:
             x = max(0, min(x, self.screen_width - 1))
             y = max(0, min(y, self.screen_height - 1))
             active_game_window()
+            asyncio.sleep(0.5)
             print(f"[INFO] 点击匹配位置: {template_name} @ ({x}, {y}), 置信度: {confidence:.2f}")
             pyautogui.click(x, y)
             return True
