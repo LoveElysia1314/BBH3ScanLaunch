@@ -381,6 +381,4 @@ if __name__ == '__main__':
     if '--auto-login' in sys.argv:
         QTimer.singleShot(100, window.oneClickLogin)
         print("[INFO] 检测到自动登录参数，将启动一键登录模式")
-    else:
-        print("NO")
     sys.exit(app.exec())

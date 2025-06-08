@@ -19,13 +19,7 @@ def set_qt_env():
     # 设置 Qt 插件路径
     os.environ['QT_PLUGIN_PATH'] = os.path.join(base_dir, 'plugins')
     os.environ['QML2_IMPORT_PATH'] = os.path.join(base_dir, 'qml')
-    
-    # 设置环境变量（解决 Windows 高 DPI 缩放问题）
-    os.environ["QT_ENABLE_HIGHDPI_SCALING"] = "1"
-    os.environ["QT_SCALE_FACTOR"] = "1"
-    QApplication.setHighDpiScaleFactorRoundingPolicy(
-        Qt.HighDpiScaleFactorRoundingPolicy.PassThrough
-    )
+
 
 # ========== EmittingStream 类：用于拦截 stdout 输出 ==========
 import sys
