@@ -4,8 +4,7 @@ import os
 import sys
 
 # 第三方库 imports
-from PySide6.QtCore import Signal, QObject, Qt
-from PySide6.QtWidgets import QApplication
+from PySide6.QtCore import Signal, QObject
 
 def set_qt_env():
     """设置 Qt 环境变量，解决打包后插件加载问题"""
