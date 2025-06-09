@@ -145,10 +145,13 @@ class ParseThread(QThread):
                         bh_info=config_manager.bh_info
                     )
                     
-                    if qr_parsed and config['auto_close']:
-                        print('[INFO] 已启用自动退出，2秒后将自动关闭扫码器')
+                    if qr_parsed:
+                        print('[INFO] 扫码成功，4秒后将自动点击窗口中心')
                         await asyncio.sleep(4)
                         click_center_of_game_window()
+                        
+                    if config['auto_close']:
+                        print('[INFO] 已启用自动退出，2秒后将关闭扫码器')
                         QTimer.singleShot(2000, QApplication.instance().quit)
                         return
                 except Exception as e:
