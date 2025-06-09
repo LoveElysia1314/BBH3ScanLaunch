@@ -100,7 +100,7 @@ async def scanCheck(bh_info, ticket, config):
     if feedback['retcode'] != 0:
         print('[INFO] 请求错误！可能是二维码已过期')
         print("[INFO]", feedback)
-        return
+        return False
     else:
         await scanConfirm(bh_info, ticket, config)
 
@@ -132,17 +132,12 @@ async def scanConfirm(bhinfoR, ticket, config):
     feedback = await sendPost('https://api-sdk.mihoyo.com/bh3_cn/combo/panda/qrcode/confirm', post_body)
     if feedback['retcode'] == 0:
         print('[INFO] 扫码成功！')
-        if config['auto_close']:
-            print('[INFO] 已启用自动退出')
-            print('[INFO] 5秒后将自动关闭扫码器')
-            time.sleep(5)
-            click_center_of_game_window()
-            QTimer.singleShot(1000, QApplication.instance().quit)
-            sys.exit()
+        return True
             
     else:
         print('[INFO] 扫码失败！')
         print("[INFO]", feedback)
+        return False
 
 
 async def verify(uid, access_key):
