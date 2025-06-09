@@ -2,7 +2,8 @@
 from PySide6 import QtCore, QtWidgets
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (QDialog, QDialogButtonBox, QLabel, QLineEdit,
-                             QVBoxLayout, QHBoxLayout, QTextBrowser)
+                               QVBoxLayout, QHBoxLayout, QTextBrowser)
+
 
 class LoginDialog(QDialog):
     def __init__(self, parent=None):
@@ -53,6 +54,7 @@ class LoginDialog(QDialog):
         
         # 自动调整窗口大小
         self.adjustSize()
+
 
 class Ui_MainWindow:
     def setupUi(self, MainWindow):
@@ -168,7 +170,7 @@ class Ui_MainWindow:
         self.launchGameBtn.setMinimumHeight(35)
         autoLoginLayout.addWidget(self.launchGameBtn)
         
-        # 一键登录崩坏3按钮（重命名）
+        # 一键登录崩坏3按钮
         self.oneClickLoginBtn = QtWidgets.QPushButton("一键登录崩坏3")
         self.oneClickLoginBtn.setMinimumHeight(40)  # 设置最小高度
         autoLoginLayout.addWidget(self.oneClickLoginBtn)
@@ -207,7 +209,7 @@ class Ui_MainWindow:
         gridLayout.addWidget(self.autoCloseCheck, row, 1, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
         row += 1
         
-        # 新增：自动切换扫码模式
+        # 自动切换扫码模式
         auto_switch_label = QtWidgets.QLabel("自动切换扫码模式:")
         self.autoSwitchModeCheck = QtWidgets.QCheckBox()
         gridLayout.addWidget(auto_switch_label, row, 0, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
@@ -249,10 +251,19 @@ class Ui_MainWindow:
 
     def connectSignals(self, MainWindow):
         self.loginBiliBtn.clicked.connect(MainWindow.login)
-        self.clipCheck.clicked.connect(MainWindow.qrCodeSwitch)
-        self.autoCloseCheck.clicked.connect(MainWindow.autoCloseSwitch)
-        self.autoClipCheck.clicked.connect(MainWindow.autoClipSwitch)
-        self.autoSwitchModeCheck.clicked.connect(MainWindow.autoSwitchModeSwitch)  # 新信号连接
+        # 使用 MainWindow 中统一的 toggle_feature 方法来处理复选框状态和文本
+        self.clipCheck.clicked.connect(
+            lambda checked: MainWindow.toggle_feature('clip_check', self.clipCheck, "当前状态")
+        )
+        self.autoClipCheck.clicked.connect(
+            lambda checked: MainWindow.toggle_feature('auto_clip', self.autoClipCheck, "当前状态")
+        )
+        self.autoCloseCheck.clicked.connect(
+            lambda checked: MainWindow.toggle_feature('auto_close', self.autoCloseCheck, "当前状态")
+        )
+        self.autoSwitchModeCheck.clicked.connect(
+            lambda checked: MainWindow.toggle_feature('auto_switch_mode', self.autoSwitchModeCheck, "当前状态")
+        )
         self.configGamePathBtn.clicked.connect(MainWindow.configGamePath)
-        self.launchGameBtn.clicked.connect(MainWindow.launchGame)  # 新按钮连接到launchGame
-        self.oneClickLoginBtn.clicked.connect(MainWindow.oneClickLogin)  # 重命名按钮连接到oneClickLogin
+        self.launchGameBtn.clicked.connect(MainWindow.launchGame)
+        self.oneClickLoginBtn.clicked.connect(MainWindow.oneClickLogin)
