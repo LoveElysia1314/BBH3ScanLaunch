@@ -292,7 +292,7 @@ class ImageProcessor:
 
     async def parse_qr_code(self, image_source="clipboard", config=None, bh_info=None):
         """
-        解析二维码并处理崩坏3登录
+        解析二维码并处理崩坏3登陆
         :param image_source: 图片来源 'clipboard' 或 'game_window'
         :return: 是否成功解析
         """
@@ -332,14 +332,14 @@ class ImageProcessor:
                       if p.startswith('ticket=')))
 
             if ticket and config and bh_info:
-                print("[INFO] 检测到有效登录票据")
+                print("[INFO] 检测到有效登陆票据")
                 print("[INFO] 开始扫码验证")
                 await mihoyosdk.scanCheck(bh_info, ticket, config)
                 self.clear_clipboard()
                 print("[INFO] 扫码验证完成")
                 return True
                 
-            print("[INFO] 缺少必要的登录信息")
+            print("[INFO] 缺少必要的登陆信息")
             return False
         except Exception as e:
             print(f"[ERROR] 二维码解析出错: {e}")

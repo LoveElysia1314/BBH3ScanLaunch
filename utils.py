@@ -6,6 +6,7 @@ import inspect
 # 第三方库 imports
 from PySide6.QtCore import Signal, QObject
 
+'''
 def set_qt_env():
     """设置 Qt 环境变量，解决打包后插件加载问题"""
     if getattr(sys, 'frozen', False):
@@ -19,6 +20,7 @@ def set_qt_env():
     os.environ['QT_PLUGIN_PATH'] = os.path.join(base_dir, 'plugins')
     os.environ['QML2_IMPORT_PATH'] = os.path.join(base_dir, 'qml')
 
+'''
 
 # ========== DummyWriter 和 EmittingStream 类：用于拦截 stdout 输出 ==========
 

@@ -21,7 +21,7 @@ class ConfigManager:
         "auto_clip": False,
         "oa_token": "ebdda08dce6feb6bc552d393bae58c81",
         "game_path": "",
-        "auto_switch_mode": False
+        "auto_click": False
     }
 
     def __init__(self):

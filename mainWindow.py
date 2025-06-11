@@ -8,7 +8,7 @@ from PySide6.QtWidgets import (QDialog, QDialogButtonBox, QLabel, QLineEdit,
 class LoginDialog(QDialog):
     def __init__(self, parent=None):
         super(LoginDialog, self).__init__(parent)
-        self.setWindowTitle('登录账号')
+        self.setWindowTitle('登陆账号')
         
         # 使用垂直布局并启用自动大小调整
         main_layout = QVBoxLayout(self)
@@ -111,7 +111,7 @@ class Ui_MainWindow:
         self.create_auto_login_group(controlLayout)
         
         # 添加Powered By标签到控制面板底部
-        powered_label = QtWidgets.QLabel("Powered By<br> Hao_cen<br>LoveElysia1314")
+        powered_label = QtWidgets.QLabel("Powered By<br> Hao_cen & LoveElysia1314")
         powered_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         powered_label.setStyleSheet("font-weight: bold; margin-top: 10px;")
         controlLayout.addWidget(powered_label)
@@ -143,19 +143,41 @@ class Ui_MainWindow:
         QtCore.QMetaObject.connectSlotsByName(MainWindow)
 
     def create_account_group(self, layout):
-        """创建账号设置组"""
+        """创建账号设置组 - 使用网格布局对齐按钮"""
         self.accountGroup = QtWidgets.QGroupBox("账号设置")
-        accountLayout = QtWidgets.QVBoxLayout(self.accountGroup)
-        accountLayout.setContentsMargins(10, 10, 10, 10)
+        gridLayout = QtWidgets.QGridLayout(self.accountGroup)
+        gridLayout.setContentsMargins(10, 10, 10, 10)
+        gridLayout.setHorizontalSpacing(10)
+        gridLayout.setVerticalSpacing(8)
+
+        row = 0
+
+        # 登陆B站账户
+        login_label = QtWidgets.QLabel("登陆B站账户:")
+        login_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         
-        self.loginBiliBtn = QtWidgets.QPushButton("点击登录")
-        self.loginBiliBtn.setMinimumHeight(35)  # 设置最小高度
+        self.loginBiliBtn = QtWidgets.QPushButton("点击登陆")
+        self.loginBiliBtn.setMinimumHeight(32)
+        
+        gridLayout.addWidget(login_label, row, 0)
+        gridLayout.addWidget(self.loginBiliBtn, row, 1)
+        row += 1
+
+        # 配置游戏路径
+        path_label = QtWidgets.QLabel("配置游戏路径:")
+        path_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        
         self.configGamePathBtn = QtWidgets.QPushButton("点击配置")
-        self.configGamePathBtn.setMinimumHeight(35)
+        self.configGamePathBtn.setMinimumHeight(32)
         
-        accountLayout.addWidget(self.create_labeled_widget("登录B站账户:", self.loginBiliBtn))
-        accountLayout.addWidget(self.create_labeled_widget("配置游戏路径:", self.configGamePathBtn))
-        
+        gridLayout.addWidget(path_label, row, 0)
+        gridLayout.addWidget(self.configGamePathBtn, row, 1)
+        row += 1
+
+        # 设置列拉伸比例：标签列自动适应，按钮列固定宽度（根据内容）
+        gridLayout.setColumnStretch(0, 1)  # 标签列可扩展，有助于对齐
+        gridLayout.setColumnStretch(1, 0)  # 按钮列保持自然宽度
+
         layout.addWidget(self.accountGroup)
 
     def create_auto_login_group(self, layout):
@@ -167,12 +189,12 @@ class Ui_MainWindow:
         
         # 打开崩坏3按钮
         self.launchGameBtn = QtWidgets.QPushButton("打开崩坏3")
-        self.launchGameBtn.setMinimumHeight(35)
+        self.launchGameBtn.setMinimumHeight(32)
         autoLoginLayout.addWidget(self.launchGameBtn)
         
-        # 一键登录崩坏3按钮
-        self.oneClickLoginBtn = QtWidgets.QPushButton("一键登录崩坏3")
-        self.oneClickLoginBtn.setMinimumHeight(40)  # 设置最小高度
+        # 一键登陆崩坏3按钮
+        self.oneClickLoginBtn = QtWidgets.QPushButton("一键登陆崩坏3")
+        self.oneClickLoginBtn.setMinimumHeight(32)  # 设置最小高度
         autoLoginLayout.addWidget(self.oneClickLoginBtn)
         
         layout.addWidget(self.autoLoginGroup)
@@ -196,24 +218,24 @@ class Ui_MainWindow:
         row += 1
 
         # 自动尝试截屏
-        auto_clip_label = QtWidgets.QLabel("自动尝试截屏:")
+        auto_clip_label = QtWidgets.QLabel("自动截屏:")
         self.autoClipCheck = QtWidgets.QCheckBox()
         gridLayout.addWidget(auto_clip_label, row, 0, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         gridLayout.addWidget(self.autoClipCheck, row, 1, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
         row += 1
 
         # 自动退出
-        auto_close_label = QtWidgets.QLabel("扫码后退出:")
+        auto_close_label = QtWidgets.QLabel("自动退出:")
         self.autoCloseCheck = QtWidgets.QCheckBox()
         gridLayout.addWidget(auto_close_label, row, 0, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         gridLayout.addWidget(self.autoCloseCheck, row, 1, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
         row += 1
         
-        # 自动切换扫码模式
-        auto_switch_label = QtWidgets.QLabel("自动切换扫码模式:")
-        self.autoSwitchModeCheck = QtWidgets.QCheckBox()
+        # 自动切换扫码模式和点击进入游戏
+        auto_switch_label = QtWidgets.QLabel("自动点击:")
+        self.autoClick = QtWidgets.QCheckBox()
         gridLayout.addWidget(auto_switch_label, row, 0, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-        gridLayout.addWidget(self.autoSwitchModeCheck, row, 1, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+        gridLayout.addWidget(self.autoClick, row, 1, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
 
         # 设置列拉伸比例
         gridLayout.setColumnStretch(0, 1)  # 标签列可扩展
@@ -235,13 +257,13 @@ class Ui_MainWindow:
 
     def get_help_text(self):
         return (
-            "1. 第一次使用需要点击登录按钮登录B站账号<br>"
-            "2. 账号密码会储存在配置文件内<br>"
-            "3. 启用解析二维码功能后，会读取剪贴板中崩坏3登录码并扫码<br>"
-            "4. 自动截屏仅截取崩坏3窗口，不论其在前台还是后台<br>"
-            "5. 使用\"一键登录崩坏3\"需要点击\"配置路径\"并选择\"BH3.exe\"<br>"
-            "6. 自动切换扫码模式会在启动游戏时自动切换到扫码登录界面<br>"
-            "参考路径：C:\\miHoYo Launcher\\games\\Honkai Impact 3rd Game\\BH3.exe"
+            "第一次使用需要点击登陆按钮登陆B站账号，账号密码会储存在配置文件内；<br>"
+            "使用\"一键登陆崩坏3\"需要点击\"配置路径\"并选择\"BH3.exe\"；<br>"
+            "\"BH3.exe\"参考路径：C:\\miHoYo Launcher\\games\\Honkai Impact 3rd Game\\BH3.exe；<br>"
+            "“解析二维码”会读取剪贴板中崩坏3登陆码并扫码；<br>"
+            "“自动截屏”会自动截取崩坏3窗口，不论其在前台还是后台；<br>"
+            "“自动退出”会在完成扫码后自动退出程序；<br>"
+            "“自动点击”会自动将游戏登陆模式切换为扫码登陆,并在扫码后点击屏幕进入游戏。"
         )
 
     def retranslateUi(self, MainWindow):
@@ -261,8 +283,8 @@ class Ui_MainWindow:
         self.autoCloseCheck.clicked.connect(
             lambda checked: MainWindow.toggle_feature('auto_close', self.autoCloseCheck, "当前状态")
         )
-        self.autoSwitchModeCheck.clicked.connect(
-            lambda checked: MainWindow.toggle_feature('auto_switch_mode', self.autoSwitchModeCheck, "当前状态")
+        self.autoClick.clicked.connect(
+            lambda checked: MainWindow.toggle_feature('auto_switch_mode', self.autoClick, "当前状态")
         )
         self.configGamePathBtn.clicked.connect(MainWindow.configGamePath)
         self.launchGameBtn.clicked.connect(MainWindow.launchGame)

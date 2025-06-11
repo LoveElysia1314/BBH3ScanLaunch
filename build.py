@@ -15,6 +15,10 @@ except ImportError:
     WIN_SHORTCUT_AVAILABLE = False
 
 
+# 开关配置：是否使用单文件模式
+USE_ONEFILE = False  # 修改此值切换模式：True=单文件，False=多文件
+
+
 def main():
     # 设置UTF-8编码
     os.environ["PYTHONUTF8"] = "1"
@@ -47,9 +51,15 @@ def main():
     # 安装依赖
     install_dependencies(SCRIPT_DIR)
 
-    # 设置输出目录
+    # 设置输出目录和程序路径
     OUTPUT_DIR = SCRIPT_DIR / "dist"
     EXE_NAME = "BBH3ScanLaunch.exe"
+
+    # 根据模式选择程序主目录
+    if USE_ONEFILE:
+        APP_DIR = OUTPUT_DIR  # 单文件模式下，EXE直接在dist目录
+    else:
+        APP_DIR = OUTPUT_DIR / "BBH3ScanLaunch"  # 多文件模式下，EXE在子目录
 
     # 创建临时目录用于 spec 文件生成
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -66,12 +76,10 @@ def main():
             sys.executable,
             "-m",
             "PyInstaller",
-#            "--noconsole",
             "--name=BBH3ScanLaunch",
             "--workpath", str(SCRIPT_DIR / "build"),
             "--distpath", str(OUTPUT_DIR),
             "--specpath", tmpdir,
-            "--onefile",
             "--noconsole",
             "-i", str(SCRIPT_DIR / "BHimage.ico"),
             "--exclude-module", "PyQt5",
@@ -83,6 +91,10 @@ def main():
             str(SCRIPT_DIR / "main.py")
         ]
 
+        # 动态添加 --onefile 参数
+        if USE_ONEFILE:
+            pyinstaller_cmd.insert(4, "--onefile")
+        
         print("\n运行 PyInstaller 命令...")
         print(" ".join(pyinstaller_cmd))
 
@@ -94,11 +106,11 @@ def main():
     # 回到原目录
     os.chdir(SCRIPT_DIR)
 
-    # 复制资源目录、配置文件、图标等
-    RESOURCE_DIRS = ["Pictures_to_Match", "templates"]
+    # 复制资源目录、图标等（排除 config.json）
+    RESOURCE_DIRS = ["templates"]
     for resource in RESOURCE_DIRS:
         src = SCRIPT_DIR / resource
-        dst = OUTPUT_DIR / resource
+        dst = APP_DIR / resource
         if src.exists():
             print(f"正在复制资源目录: {resource}")
             if dst.exists():
@@ -107,27 +119,37 @@ def main():
         else:
             print(f"警告：找不到资源目录: {resource}")
 
-    config_src = SCRIPT_DIR / "config.json"
-    config_dst = OUTPUT_DIR / "config.json"
-    if config_src.exists():
-        shutil.copy2(config_src, config_dst)
+    # 仅复制 Pictures_to_Match/Default 子目录
+    pics_src = SCRIPT_DIR / "Pictures_to_Match" / "Default"
+    pics_dst = APP_DIR / "Pictures_to_Match" / "Default"
+    if pics_src.exists():
+        print("正在复制资源目录: Pictures_to_Match/Default")
+        if pics_dst.exists():
+            shutil.rmtree(pics_dst)
+        shutil.copytree(pics_src, pics_dst)
+    else:
+        print("警告：找不到资源目录: Pictures_to_Match/Default")
 
+    # 图标文件
     icon_src = SCRIPT_DIR / "BHimage.ico"
-    icon_dst = OUTPUT_DIR / "BHimage.ico"
+    icon_dst = APP_DIR / "BHimage.ico"
     if icon_src.exists():
         shutil.copy2(icon_src, icon_dst)
 
-    # 创建快捷方式 (仅 Windows)
+    # 创建快捷方式 (仅 Windows)，生成在 dist/ 根目录下
     if sys.platform == "win32":
-        create_windows_shortcuts(OUTPUT_DIR, EXE_NAME)
+        create_windows_shortcuts(APP_DIR, EXE_NAME)
 
-    # 创建纯净压缩包
-    create_clean_package(SCRIPT_DIR, OUTPUT_DIR, EXE_NAME)
+    # 创建纯净压缩包（直接打包整个 dist/ 目录）
+    create_clean_package(SCRIPT_DIR, OUTPUT_DIR, EXE_NAME, APP_DIR)
 
     print("\n============= 构建成功 =============")
-    print(f"单文件EXE: {OUTPUT_DIR / EXE_NAME}")
-    print(f"资源目录: {OUTPUT_DIR / 'Pictures_to_Match'} 和 {OUTPUT_DIR / 'templates'}")
-    print(f"压缩包位置: {OUTPUT_DIR / 'BBH3ScanLaunch_v8.3.zip'}")
+    if USE_ONEFILE:
+        print(f"单文件EXE: {APP_DIR / EXE_NAME}")
+    else:
+        print(f"程序目录: {APP_DIR}")
+    print(f"资源目录: {APP_DIR / 'Pictures_to_Match'} 和 {APP_DIR / 'templates'}")
+    print(f"压缩包位置: {OUTPUT_DIR.parent / 'BBH3ScanLaunch_v8.3.zip'}")
     print("===================================")
 
 
@@ -148,8 +170,8 @@ def clean_environment(venv_dir):
         "TEMP": os.environ.get("TEMP", ""),
         "TMP": os.environ.get("TMP", ""),
         "PYTHONUTF8": "1",
-        "USERPROFILE": user_profile,   # 👈 添加这一行
-        "HOME": user_profile           # 👈 如果是 Linux/macOS
+        "USERPROFILE": user_profile,
+        "HOME": user_profile
     }
     
     # 对于Windows系统，添加必要的系统路径
@@ -172,7 +194,7 @@ def clean_environment(venv_dir):
     
     # 设置保留的环境变量
     for key, value in keep_envs.items():
-        if value:  # 避免设置空值
+        if value:
             os.environ[key] = value
     
     print("当前环境变量:")
@@ -200,14 +222,14 @@ def install_dependencies(script_dir):
         print(f"未找到 requirements.txt 文件，跳过依赖安装")
 
 
-def create_windows_shortcuts(output_dir, exe_name):
+def create_windows_shortcuts(app_dir, exe_name):
     """使用 Python 创建 Windows 快捷方式 (.lnk)"""
     if not WIN_SHORTCUT_AVAILABLE:
         print("警告：未安装 pywin32，跳过创建快捷方式")
         return
 
-    TARGET_EXE = output_dir / exe_name
-    ICON_FILE = output_dir / "BHimage.ico"
+    TARGET_EXE = app_dir / exe_name
+    ICON_FILE = app_dir / "BHimage.ico"
 
     def create_shortcut(target_path, shortcut_path, arguments="", icon_path=None, workdir=None):
         shell = Dispatch('WScript.Shell')
@@ -216,78 +238,41 @@ def create_windows_shortcuts(output_dir, exe_name):
         shortcut.Arguments = arguments
         if icon_path and icon_path.exists():
             shortcut.IconLocation = str(icon_path)
-        shortcut.WorkingDirectory = str(workdir or output_dir)
+        shortcut.WorkingDirectory = str(workdir or app_dir)
         shortcut.save()
 
-    shortcut1 = output_dir / "[仅B服] 崩坏3扫码器 [限v8.3].lnk"
-    shortcut2 = output_dir / "[仅B服] 一键登录崩坏3 [限v8.3].lnk"
+    # 快捷方式生成在 dist/ 根目录下
+    shortcut1 = app_dir.parent / "[仅B服] 崩坏3扫码器 [限v8.3].lnk"
+    shortcut2 = app_dir.parent / "[仅B服] 一键登陆崩坏3 [限v8.3].lnk"
 
     # 创建第一个快捷方式（普通启动）
     create_shortcut(
         target_path=TARGET_EXE,
         shortcut_path=shortcut1,
         icon_path=ICON_FILE,
-        workdir=output_dir
+        workdir=app_dir
     )
 
-    # 创建第二个快捷方式（带自动登录参数）
+    # 创建第二个快捷方式（带自动登陆参数）
     create_shortcut(
         target_path=TARGET_EXE,
         shortcut_path=shortcut2,
         arguments="--auto-login",
         icon_path=ICON_FILE,
-        workdir=output_dir
+        workdir=app_dir
     )
 
     print("已创建快捷方式")
 
 
-def create_clean_package(script_dir, output_dir, exe_name):
-    """创建纯净压缩包"""
-    PACKAGE_DIR = output_dir / "BBH3ScanLaunch_Package"
-    if PACKAGE_DIR.exists():
-        shutil.rmtree(PACKAGE_DIR)
-    PACKAGE_DIR.mkdir(parents=True, exist_ok=True)
-    
-    # 复制EXE文件
-    exe_src = output_dir / exe_name
-    exe_dst = PACKAGE_DIR / exe_name
-    shutil.copy2(exe_src, exe_dst)
-    
-    # 特殊处理Pictures_to_Match目录（只复制Default子目录）
-    default_pics_src = script_dir / "Pictures_to_Match" / "Default"
-    if default_pics_src.exists():
-        print("正在复制资源目录: Pictures_to_Match/Default")
-        default_pics_dst = PACKAGE_DIR / "Pictures_to_Match" / "Default"
-        shutil.copytree(default_pics_src, default_pics_dst)
-    
-    # 复制templates目录
-    templates_src = script_dir / "templates"
-    templates_dst = PACKAGE_DIR / "templates"
-    if templates_src.exists():
-        shutil.copytree(templates_src, templates_dst)
-    
-    # 复制配置文件
-    config_src = output_dir / "config.json"
-    config_dst = PACKAGE_DIR / "config.json"
-    if config_src.exists():
-        shutil.copy2(config_src, config_dst)
-    
-    # 复制图标
-    icon_src = output_dir / "BHimage.ico"
-    icon_dst = PACKAGE_DIR / "BHimage.ico"
-    if icon_src.exists():
-        shutil.copy2(icon_src, icon_dst)
-    
-    # 创建压缩包
+def create_clean_package(script_dir, output_dir, exe_name, app_dir):
+    """创建纯净压缩包：直接打包 dist 目录中的所有内容"""
     ZIP_FILE = output_dir.parent / "BBH3ScanLaunch_v8.3.zip"
     if ZIP_FILE.exists():
         ZIP_FILE.unlink()
-    
-    shutil.make_archive(str(ZIP_FILE.with_suffix('')), 'zip', PACKAGE_DIR)
-    
-    # 清理临时打包目录
-    shutil.rmtree(PACKAGE_DIR)
+
+    print(f"正在创建压缩包，内容来自: {output_dir}")
+    shutil.make_archive(str(ZIP_FILE.with_suffix('')), 'zip', output_dir)
     print(f"已创建压缩包: {ZIP_FILE}")
 
 
