@@ -2,7 +2,7 @@
 # 标准库 imports
 import os
 import sys
-
+import inspect
 # 第三方库 imports
 from PySide6.QtCore import Signal, QObject
 
@@ -21,8 +21,7 @@ def set_qt_env():
 
 
 # ========== EmittingStream 类：用于拦截 stdout 输出 ==========
-import sys
-import inspect
+
 
 class EmittingStream(QObject):
     textWritten = Signal(str)

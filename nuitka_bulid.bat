@@ -5,6 +5,15 @@ setlocal enabledelayedexpansion
 :: 获取当前脚本目录
 set "SCRIPT_DIR=%~dp0"
 
+:: 激活虚拟环境
+set "VENV_DIR=%SCRIPT_DIR%venv"
+if not exist "%VENV_DIR%\Scripts\activate.bat" (
+    echo 错误：未找到虚拟环境！
+    echo 请确保在脚本目录下创建了venv环境
+    exit /b 1
+)
+call "%VENV_DIR%\Scripts\activate.bat"
+
 :: 自动获取Qt插件路径
 for /f "delims=" %%i in ('python -c "from PySide6.QtCore import QLibraryInfo; import os; path = QLibraryInfo.path(QLibraryInfo.LibraryPath.PluginsPath); print(os.path.normpath(path))"') do (
     set "QT_PLUGINS=%%i"
@@ -12,7 +21,7 @@ for /f "delims=" %%i in ('python -c "from PySide6.QtCore import QLibraryInfo; im
 
 if not defined QT_PLUGINS (
     echo 错误：未找到Qt插件路径！
-    echo 请确保PySide6已正确安装
+    echo 请确保PySide6已在虚拟环境中安装
     exit /b 1
 )
 
@@ -44,7 +53,7 @@ set "EXE_NAME=BBH3ScanLaunch.exe"
 if exist "%OUTPUT_DIR%" rd /s /q "%OUTPUT_DIR%"
 mkdir "%OUTPUT_DIR%"
 
-:: 修复Nuitka控制台模式警告
+:: 使用虚拟环境中的Nuitka进行编译
 nuitka --onefile ^
     --output-dir="%OUTPUT_DIR%" ^
     --output-filename=%EXE_NAME% ^
@@ -147,9 +156,4 @@ echo 资源目录: %OUTPUT_DIR%\Pictures_to_Match 和 %OUTPUT_DIR%\templates
 echo 压缩包位置: %ZIP_FILE%
 echo ===================================
 
-:: 解决PyQt5冲突警告
-echo.
-echo 注意：发现PyQt5与PySide6冲突警告
-echo 建议运行以下命令解决冲突：
-echo     pip uninstall -y PyQt5 PyQt5-Qt5 PyQt5-sip
 pause

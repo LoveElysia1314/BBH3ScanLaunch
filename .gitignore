@@ -28,3 +28,4 @@ bulid.bat
 *.spec
 BBH3ScanLunch.spec
 *.spec
+/venv

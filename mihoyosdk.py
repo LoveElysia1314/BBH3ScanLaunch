@@ -2,15 +2,9 @@
 import hashlib
 import hmac
 import json
-import sys
 import time
-import asyncio
-# 第三方库 imports
-from PySide6.QtCore import QTimer
-from PySide6.QtWidgets import QApplication
 # 自定义库 imports
 from network_utils import sendGet, sendPost, sendGetRaw
-from bh3_utils import click_center_of_game_window
 
 url = 'https://api-sdk.mihoyo.com/bh3_cn/combo/granter/login/v2/login'
 verifyBody = '{"device":"0000000000000000","app_id":"1","channel_id":"14","data":{},"sign":""}'

@@ -25,11 +25,6 @@ SCREENSHOT_DELAY = 0.2  # 截图延迟时间
 GAME_WINDOW_TITLE = "崩坏3"
 DEFAULT_RESOLUTION = 8000  # 默认模板分辨率
 
-
-import pyautogui
-import pygetwindow as gw
-import time
-
 def click_center_of_game_window():
     """
     激活GAME_WINDOW_TITLE对应窗口并点击中心位置。
