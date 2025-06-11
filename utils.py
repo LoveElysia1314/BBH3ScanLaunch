@@ -20,20 +20,34 @@ def set_qt_env():
     os.environ['QML2_IMPORT_PATH'] = os.path.join(base_dir, 'qml')
 
 
-# ========== EmittingStream 类：用于拦截 stdout 输出 ==========
+# ========== DummyWriter 和 EmittingStream 类：用于拦截 stdout 输出 ==========
 
+class DummyWriter:
+    def write(self, text):
+        pass
+
+    def flush(self):
+        pass
 
 class EmittingStream(QObject):
     textWritten = Signal(str)
 
     def __init__(self):
         super().__init__()
-        self.original_stdout = sys.stdout
+
+        # 确保 original_stdout 不为 None
+        self.original_stdout = sys.stdout if sys.stdout is not None else DummyWriter()
         self._buffer = ""
 
         # 控制选项
         self.show_debug_gui = False     # 是否在 GUI 中显示 DEBUG
         self.show_debug_terminal = False  # 是否在终端中显示 DEBUG
+
+        # 自动判断是否运行在无控制台模式下
+        if sys.stdout is None or isinstance(sys.stdout, DummyWriter):
+            self.show_debug_terminal = False
+        else:
+            self.show_debug_terminal = True
 
     def write(self, text):
         # 先缓存文本
@@ -56,7 +70,8 @@ class EmittingStream(QObject):
 
                 # 决定是否输出到终端
                 if self.show_debug_terminal or not is_debug:
-                    self.original_stdout.write(full_line + '\n')  # 添加换行，因为 split 已经去掉了
+                    self.original_stdout.write(full_line + '\n')  # 添加换行
+                    self.original_stdout.flush()
 
     def flush(self):
         # 处理缓冲区最后的内容（可能没有换行）
@@ -72,10 +87,10 @@ class EmittingStream(QObject):
             # 输出到终端
             if self.show_debug_terminal or not is_debug:
                 self.original_stdout.write(full_line)
-        
-        self.original_stdout.flush()
+                self.original_stdout.flush()
 
     def get_caller_info(self):
+        import inspect
         frame = inspect.currentframe()
         try:
             outer_frame = frame.f_back.f_back
@@ -85,4 +100,3 @@ class EmittingStream(QObject):
             return f"[{modname} {filename}:{lineno}]"
         finally:
             del frame
-

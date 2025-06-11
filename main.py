@@ -5,6 +5,7 @@ import subprocess
 import webbrowser
 from threading import Thread
 from flask import Flask, abort, render_template, request
+import PySide6
 from PySide6.QtCore import QThread, Signal, QTimer
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QApplication, QMainWindow, QFileDialog, QMessageBox
@@ -279,7 +280,7 @@ if __name__ == '__main__':
     ui.setupUi(window)
 
     stream.textWritten.connect(lambda text: ui.logText.append(text))
-    set_qt_env()
+#    set_qt_env()
 
     fapp = Flask(__name__)
 

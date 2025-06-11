@@ -35,6 +35,9 @@ def main():
     # 在Windows上设置虚拟环境
     if sys.platform == "win32":
         os.environ["PATH"] = f"{VENV_DIR / 'Scripts'};{os.environ['PATH']}"
+    
+    # 屏蔽除虚拟环境外的所有环境变量
+    clean_environment(VENV_DIR)
 
     # 清理旧的构建缓存
     for cache_dir in ["__pycache__", "build", "dist"]:
@@ -43,23 +46,6 @@ def main():
 
     # 安装依赖
     install_dependencies(SCRIPT_DIR)
-
-    # 获取Qt插件路径
-    QT_PLUGINS = get_qt_plugins_path()
-    PLUGIN_SUBDIRS = ["platforms", "imageformats", "styles", "tls"]
-
-    # 构建包含数据目录的参数
-    ADD_DATA_ARGS = []
-    for subdir in PLUGIN_SUBDIRS:
-        source_dir = Path(QT_PLUGINS) / subdir
-        if source_dir.exists() and any(source_dir.iterdir()):
-            if sys.platform == "win32":
-                arg = f"--add-data={source_dir};qt6_plugins/{subdir}"
-            else:
-                arg = f"--add-data={source_dir}:qt6_plugins/{subdir}"
-            ADD_DATA_ARGS.append(arg)
-        else:
-            print(f"警告：Qt插件目录 {source_dir} 不存在或为空，跳过")
 
     # 设置输出目录
     OUTPUT_DIR = SCRIPT_DIR / "dist"
@@ -80,18 +66,20 @@ def main():
             sys.executable,
             "-m",
             "PyInstaller",
+#            "--noconsole",
             "--name=BBH3ScanLaunch",
             "--workpath", str(SCRIPT_DIR / "build"),
             "--distpath", str(OUTPUT_DIR),
             "--specpath", tmpdir,
             "--onefile",
-            "--windowed" if sys.platform == "win32" else "",
+            "--noconsole",
             "-i", str(SCRIPT_DIR / "BHimage.ico"),
-        ] + ADD_DATA_ARGS + [
+            "--exclude-module", "PyQt5",
+            "--exclude-module", "PyQt6", 
+            "--add-binary", f"{VENV_DIR / 'Lib' / 'site-packages' / 'pyzbar' / 'libiconv.dll'};.",
+            "--add-binary", f"{VENV_DIR / 'Lib' / 'site-packages' / 'pyzbar' / 'libzbar-64.dll'};.",
             "--add-data", f"{SCRIPT_DIR / 'templates'};templates",
             "--add-data", f"{SCRIPT_DIR / 'Pictures_to_Match'};Pictures_to_Match",
-            "--hidden-import=PySide6.QtNetwork",
-            "--hidden-import=PySide6.QtSvg",
             str(SCRIPT_DIR / "main.py")
         ]
 
@@ -143,6 +131,55 @@ def main():
     print("===================================")
 
 
+def clean_environment(venv_dir):
+    """屏蔽除虚拟环境外的所有环境变量"""
+    print("\n===== 清理环境变量 =====")
+    
+    # 获取系统主目录路径
+    if sys.platform == "win32":
+        user_profile = os.environ.get("USERPROFILE", "")
+    else:
+        user_profile = os.environ.get("HOME", "") or os.environ.get("USERPROFILE", "")
+
+    # 保留的关键环境变量
+    keep_envs = {
+        "PATH": str(venv_dir / "Scripts") + os.pathsep + str(venv_dir / "bin"),
+        "SYSTEMROOT": os.environ.get("SYSTEMROOT", ""),
+        "TEMP": os.environ.get("TEMP", ""),
+        "TMP": os.environ.get("TMP", ""),
+        "PYTHONUTF8": "1",
+        "USERPROFILE": user_profile,   # 👈 添加这一行
+        "HOME": user_profile           # 👈 如果是 Linux/macOS
+    }
+    
+    # 对于Windows系统，添加必要的系统路径
+    if sys.platform == "win32":
+        sys_paths = [
+            os.environ.get("SystemRoot", ""),
+            os.path.join(os.environ.get("SystemRoot", ""), "System32"),
+            os.path.join(os.environ.get("SystemRoot", ""), "SysWOW64")
+        ]
+        keep_envs["PATH"] = os.pathsep.join(
+            [str(venv_dir / "Scripts")] + 
+            [p for p in sys_paths if p] + 
+            [keep_envs["PATH"]]
+        )
+    
+    # 清除非必要的环境变量
+    for key in list(os.environ.keys()):
+        if key not in keep_envs:
+            del os.environ[key]
+    
+    # 设置保留的环境变量
+    for key, value in keep_envs.items():
+        if value:  # 避免设置空值
+            os.environ[key] = value
+    
+    print("当前环境变量:")
+    for key, value in os.environ.items():
+        print(f"{key}: {value}")
+
+
 def install_dependencies(script_dir):
     """安装依赖"""
     print("\n===== 安装依赖 =====")
@@ -161,24 +198,6 @@ def install_dependencies(script_dir):
             sys.exit(1)
     else:
         print(f"未找到 requirements.txt 文件，跳过依赖安装")
-
-
-def get_qt_plugins_path():
-    """获取Qt插件路径"""
-    cmd = [
-        sys.executable,
-        "-c",
-        "from PySide6.QtCore import QLibraryInfo; "
-        "import os; "
-        "path = QLibraryInfo.path(QLibraryInfo.LibraryPath.PluginsPath); "
-        "print(os.path.normpath(path))"
-    ]
-    
-    try:
-        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
-        return result.stdout.strip()
-    except (subprocess.CalledProcessError, FileNotFoundError):
-        return None
 
 
 def create_windows_shortcuts(output_dir, exe_name):
@@ -200,7 +219,6 @@ def create_windows_shortcuts(output_dir, exe_name):
         shortcut.WorkingDirectory = str(workdir or output_dir)
         shortcut.save()
 
-    # 快捷方式路径
     shortcut1 = output_dir / "[仅B服] 崩坏3扫码器 [限v8.3].lnk"
     shortcut2 = output_dir / "[仅B服] 一键登录崩坏3 [限v8.3].lnk"
 
@@ -262,7 +280,7 @@ def create_clean_package(script_dir, output_dir, exe_name):
         shutil.copy2(icon_src, icon_dst)
     
     # 创建压缩包
-    ZIP_FILE = output_dir / "BBH3ScanLaunch_v8.3.zip"
+    ZIP_FILE = output_dir.parent / "BBH3ScanLaunch_v8.3.zip"
     if ZIP_FILE.exists():
         ZIP_FILE.unlink()
     
