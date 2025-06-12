@@ -148,31 +148,30 @@ class ImageProcessor:
         screen_np = np.array(pil_img)
         return cv2.cvtColor(screen_np, cv2.COLOR_RGB2GRAY)
 
-    def match_template(self, template_name, threshold=0.8):
+    def match_template(self, template_name, screen_gray, threshold=0.8):
         """
         单尺度模板匹配
         :param template_name: 模板文件名
         :param threshold: 匹配阈值
         :return: 匹配位置和置信度，或(None, 0)
         """
-        print(f"[DEBUG] 开始模板匹配: {template_name}")
+        #print(f"[DEBUG] 开始模板匹配: {template_name}")
         if template_name not in self.template_cache:
             print(f"[WARNING] 模板不存在: {template_name}")
             return None, 0
 
         template = self.template_cache[template_name]
-        screen_gray = self.capture_screen()
         if screen_gray is None:
             return None, 0
 
         result = cv2.matchTemplate(screen_gray, template, cv2.TM_CCOEFF_NORMED)
         min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(result)
-        print(f"[DEBUG] 模板匹配结果 - 最大置信度: {max_val:.2f}")
+        #print(f"[DEBUG] 模板匹配结果 - 最大置信度: {max_val:.2f}")
 
         if max_val >= threshold:
             x = max_loc[0] + template.shape[1] // 2
             y = max_loc[1] + template.shape[0] // 2
-            print(f"[DEBUG] 找到匹配位置: ({x}, {y})")
+            #print(f"[DEBUG] 找到匹配位置: ({x}, {y})")
             return (x, y), max_val
         return None, max_val
 
@@ -184,9 +183,10 @@ class ImageProcessor:
         print("[DEBUG] 开始模板匹配点击流程")
         best_match = None
         best_confidence = 0
+        screen_gray = self.capture_screen()
 
         for template_name in self.template_cache:
-            location, confidence = self.match_template(template_name, threshold)
+            location, confidence = self.match_template(template_name, screen_gray, threshold)
             if location and confidence > best_confidence:
                 best_match = (template_name, location, confidence)
                 best_confidence = confidence
@@ -196,7 +196,7 @@ class ImageProcessor:
             x = max(0, min(x, self.screen_width - 1))
             y = max(0, min(y, self.screen_height - 1))
             print(f"[INFO] 匹配到位置: {template_name} @ ({x}, {y}), 置信度: {confidence:.2f}")
-            if active_game_window:
+            if active_game_window():
                 pyautogui.click(x, y)
                 print(f"[INFO] 点击对应模板")
                 return True
@@ -285,23 +285,18 @@ def is_game_window_exist():
 
 def active_game_window():
     """激活游戏窗口"""
-    if is_game_window_active():
-        return True
     try:
         windows = gw.getWindowsWithTitle(GAME_WINDOW_TITLE)
-        if not windows:
-            return False
-            
         window = windows[0]
         if window.isMinimized:
             window.restore()
             time.sleep(0.5)
         window.activate()
-        return True
         
     except Exception as e:
         print(f"[ERROR] 激活窗口失败: {e}")
-        return False
+    
+    return True if is_game_window_active() else False
 
 
 def is_game_window_active():
