@@ -141,7 +141,7 @@ def copy_resources(script_dir, app_dir):
     """复制所有资源文件"""
     resources = [
         ("templates", "目录"),
-        ("Pictures_to_Match/Default", "目录"),
+        ("Pictures_to_Match", "目录"),
         ("BHimage.ico", "文件")
     ]
     
