@@ -120,12 +120,13 @@ class ParseThread(QThread):
                 if is_game_window_exist():
                     image_processor.match_and_click()
                 else:
-                    print("[DEBUG] 崩坏3窗口不存在，跳过图像识别和点击")
+                    #print("[DEBUG] 崩坏3窗口不存在，跳过图像识别和点击")
+                    pass
 
             if config['auto_clip']:
                 try:
                     if not is_game_window_exist():
-                        print("[DEBUG] 崩坏3窗口不存在，跳过自动截屏")
+                        #print("[DEBUG] 崩坏3窗口不存在，跳过自动截屏")
                         await asyncio.sleep(config['sleep_time'])
                         continue
                     screenshot = image_processor.capture_screen()
