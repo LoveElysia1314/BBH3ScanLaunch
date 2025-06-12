@@ -195,12 +195,14 @@ class ImageProcessor:
             template_name, (x, y), confidence = best_match
             x = max(0, min(x, self.screen_width - 1))
             y = max(0, min(y, self.screen_height - 1))
-            
-            active_game_window()
-            asyncio.sleep(0.5)
-            print(f"[INFO] 点击匹配位置: {template_name} @ ({x}, {y}), 置信度: {confidence:.2f}")
-            pyautogui.click(x, y)
-            return True
+            print(f"[INFO] 匹配到位置: {template_name} @ ({x}, {y}), 置信度: {confidence:.2f}")
+            if active_game_window:
+                pyautogui.click(x, y)
+                print(f"[INFO] 点击对应模板")
+                return True
+            else:
+                print(f"[INFO] 游戏窗口未激活，取消点击")
+                return False
         
         print("[DEBUG] 未找到符合条件的匹配")
         return False
@@ -283,6 +285,8 @@ def is_game_window_exist():
 
 def active_game_window():
     """激活游戏窗口"""
+    if is_game_window_active():
+        return True
     try:
         windows = gw.getWindowsWithTitle(GAME_WINDOW_TITLE)
         if not windows:
@@ -297,6 +301,27 @@ def active_game_window():
         
     except Exception as e:
         print(f"[ERROR] 激活窗口失败: {e}")
+        return False
+
+
+def is_game_window_active():
+    """
+    检查指定标题的游戏窗口是否处于激活（焦点）状态。
+    :return: 如果窗口存在且激活返回 True，否则返回 False
+    """
+    try:
+        windows = gw.getWindowsWithTitle(GAME_WINDOW_TITLE)
+        if not windows:
+            print("[DEBUG] 未找到游戏窗口")
+            return False
+            
+        window = windows[0]
+        active_status = window.isActive
+        print(f"[DEBUG] 窗口激活状态检查: {GAME_WINDOW_TITLE} {'已激活' if active_status else '未激活'}")
+        return active_status
+        
+    except Exception as e:
+        print(f"[ERROR] 检查窗口激活状态失败: {e}")
         return False
 
 def click_center_of_game_window():
