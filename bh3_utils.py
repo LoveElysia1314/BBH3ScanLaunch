@@ -110,10 +110,7 @@ class WindowCapture:
             saveBitMap.CreateCompatibleBitmap(mfcDC, width, height)
             saveDC.SelectObject(saveBitMap)
             
-            result = windll.user32.PrintWindow(self.hwnd, saveDC.GetSafeHdc(), 0)
-            if not result:
-                print("[DEBUG] PrintWindow调用失败，尝试备选方案")
-                saveDC.BitBlt((0, 0), (width, height), mfcDC, (0, 0), win32con.SRCCOPY)
+            windll.user32.PrintWindow(self.hwnd, saveDC.GetSafeHdc(), 0)
             
             bmpinfo = saveBitMap.GetInfo()
             bmpstr = saveBitMap.GetBitmapBits(True)
