@@ -1,4 +1,5 @@
 # main.py
+import ctypes
 import sys
 import asyncio
 import subprocess
@@ -14,7 +15,7 @@ import bsgamesdk
 import mihoyosdk
 import mainWindow
 from bh3_utils import image_processor, is_game_window_exist, click_center_of_game_window
-from utils import EmittingStream # ,set_qt_env
+from utils import EmittingStream
 from config_utils import ConfigManager
 
 # ========== 初始化配置管理器 ==========
@@ -113,15 +114,24 @@ class ParseThread(QThread):
     update_log = Signal(str)
     exit_app = Signal()
 
+    def is_admin(self):
+        """使用Windows API检查管理员权限"""
+        try:
+            return ctypes.windll.shell32.IsUserAnAdmin()
+        except:
+            return False
+
     async def check(self):
         while True:
             config = config_manager.config
             if config['auto_click']:
-                if is_game_window_exist():
-                    image_processor.match_and_click()
-                else:
-                    #print("[DEBUG] 崩坏3窗口不存在，跳过图像识别和点击")
-                    pass
+                    if not self.is_admin():
+                        print("[INFO] 没有管理员权限，跳过图形识别和点击")
+                    elif is_game_window_exist():
+                        image_processor.match_and_click()
+                    else:
+                        #print("[DEBUG] 崩坏3窗口不存在，跳过图像识别和点击")
+                        pass
 
             if config['auto_clip']:
                 try:
@@ -282,7 +292,6 @@ if __name__ == '__main__':
     ui.setupUi(window)
 
     stream.textWritten.connect(lambda text: ui.logText.append(text))
-#    set_qt_env()
 
     fapp = Flask(__name__)
 
