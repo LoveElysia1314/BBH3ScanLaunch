@@ -4,9 +4,7 @@ opencv-python
 numpy
 pillow
 pyautogui
-pygetwindow
 pyzbar
-screeninfo
 pywin32
 cryptography
 requests

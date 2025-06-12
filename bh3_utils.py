@@ -8,9 +8,7 @@ import numpy as np
 from ctypes import windll
 from PIL import Image, ImageGrab
 import pyautogui
-import pygetwindow as gw
 from pyzbar.pyzbar import decode
-from screeninfo import get_monitors
 import win32con
 import win32gui
 import win32ui
@@ -21,22 +19,89 @@ TEMPLATE_DIR = "Pictures_to_Match"
 SCREENSHOT_DELAY = 0.2  # 截图延迟时间
 GAME_WINDOW_TITLE = "崩坏3"
 
+def is_game_window_exist():
+    """检查所有窗口中是否存在标题全字匹配GAME_WINDOW_TITLE的窗口"""
+    try:
+        def enum_windows(hwnd, results):
+            if win32gui.IsWindowVisible(hwnd):
+                title = win32gui.GetWindowText(hwnd)
+                if title == GAME_WINDOW_TITLE:
+                    results.append(True)
+        results = []
+        win32gui.EnumWindows(enum_windows, results)
+        exist = bool(results)
+        print(f"[DEBUG] 游戏窗口存在检查: {'存在' if exist else '不存在'}")
+        return exist
+    except Exception as e:
+        print(f"[ERROR] 检查窗口存在状态出错: {e}")
+        return False
+
+def active_game_window():
+    """激活指定标题的游戏窗口"""
+    try:
+        hwnd = win32gui.FindWindow(None, GAME_WINDOW_TITLE)
+        if not hwnd:
+            print("[DEBUG] 未找到游戏窗口")
+            return False
+        
+        if win32gui.IsIconic(hwnd):
+            print("[DEBUG] 恢复最小化窗口")
+            win32gui.ShowWindow(hwnd, win32con.SW_RESTORE)
+            time.sleep(0.5)
+        
+        print("[DEBUG] 激活游戏窗口")
+        win32gui.SetForegroundWindow(hwnd)
+        return True
+    except Exception as e:
+        print(f"[ERROR] 激活窗口出错: {e}")
+        return False
+
+def click_center_of_game_window():
+    """
+    激活GAME_WINDOW_TITLE对应窗口并点击中心位置。
+    """
+    if is_game_window_exist():
+        hwnd = win32gui.FindWindow(None, GAME_WINDOW_TITLE)
+        if not hwnd:
+            print("[INFO] 未找到游戏窗口")
+            return
+        
+        left, top, right, bottom = win32gui.GetWindowRect(hwnd)
+        width = right - left
+        height = bottom - top
+        center_x = left + width // 2
+        center_y = top + height // 2
+        
+        pyautogui.click(center_x, center_y)
+        print(f"[DEBUG]已点击窗口中心: ({center_x}, {center_y})")
+
 class WindowCapture:
-    """窗口截图工具类（支持后台截图）"""
+    """Windows 窗口截图工具类（支持后台窗口截图）"""
     def __init__(self, window_title):
+        print(f"[DEBUG] 初始化窗口捕获器: {window_title}")
         self.window_title = window_title
         self.hwnd = None
+        self._retry_count = 0
+
+    def _find_window(self):
+        """查找窗口句柄"""
+        self.hwnd = win32gui.FindWindow(None, self.window_title)
+        if self.hwnd:
+            print(f"[DEBUG] 找到窗口句柄: {self.hwnd}")
+            return True
+        print(f"[DEBUG] 未找到窗口: {self.window_title}")
+        return False
 
     def capture_window(self):
-        """截取指定窗口画面"""
+        """截取整个窗口画面（后台窗口）"""
         try:
-            if not self.hwnd:
-                self.hwnd = win32gui.FindWindow(None, self.window_title)
-            if not self.hwnd:
+            if not self.hwnd and not self._find_window():
+                print("[DEBUG] 无法获取窗口句柄，截图失败")
                 return None
-                
-            left, top, right, bottom = win32gui.GetWindowRect(self.hwnd)
-            width, height = right - left, bottom - top
+            
+            left, top, right, bot = win32gui.GetWindowRect(self.hwnd)
+            width, height = right - left, bot - top
+            print(f"[DEBUG] 窗口尺寸: {width}x{height}")
             
             hwndDC = win32gui.GetWindowDC(self.hwnd)
             mfcDC = win32ui.CreateDCFromHandle(hwndDC)
@@ -47,26 +112,24 @@ class WindowCapture:
             
             result = windll.user32.PrintWindow(self.hwnd, saveDC.GetSafeHdc(), 0)
             if not result:
+                print("[DEBUG] PrintWindow调用失败，尝试备选方案")
                 saveDC.BitBlt((0, 0), (width, height), mfcDC, (0, 0), win32con.SRCCOPY)
-                
-            bmp_info = saveBitMap.GetInfo()
-            bmp_str = saveBitMap.GetBitmapBits(True)
+            
+            bmpinfo = saveBitMap.GetInfo()
+            bmpstr = saveBitMap.GetBitmapBits(True)
             pil_img = Image.frombuffer(
-                'RGB', 
-                (bmp_info['bmWidth'], bmp_info['bmHeight']),
-                bmp_str, 'raw', 'BGRX', 0, 1
+                'RGB',
+                (bmpinfo['bmWidth'], bmpinfo['bmHeight']),
+                bmpstr, 'raw', 'BGRX', 0, 1
             )
             
-            # 清理资源
             win32gui.DeleteObject(saveBitMap.GetHandle())
             saveDC.DeleteDC()
             mfcDC.DeleteDC()
             win32gui.ReleaseDC(self.hwnd, hwndDC)
-            
             return pil_img
-            
         except Exception as e:
-            print(f"[ERROR] 窗口截图失败: {e}")
+            print(f"[ERROR] 窗口捕获出错: {e}")
             self.hwnd = None
             return None
 
@@ -79,11 +142,11 @@ class ImageProcessor:
         print(f"[INFO] 屏幕分辨率: {self.screen_width}x{self.screen_height}")
         self.template_cache = {}  # 内存缓存模板
         self.window_capturer = None  # 延迟初始化窗口捕获器
-        self._load_templates()  # 加载并预处理模板
+        self._load_templates()
 
     def _get_screen_resolution(self):
         """获取当前屏幕分辨率"""
-        return get_monitors()[0].width, get_monitors()[0].height
+        return windll.user32.GetSystemMetrics(0), windll.user32.GetSystemMetrics(1)
 
     def _get_resolution_from_filename(self, filename):
         """从文件名中提取分辨率信息（如 4000p）"""
@@ -167,7 +230,7 @@ class ImageProcessor:
         result = cv2.matchTemplate(screen_gray, template, cv2.TM_CCOEFF_NORMED)
         min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(result)
         #print(f"[DEBUG] 模板匹配结果 - 最大置信度: {max_val:.2f}")
-
+        
         if max_val >= threshold:
             x = max_loc[0] + template.shape[1] // 2
             y = max_loc[1] + template.shape[0] // 2
@@ -184,7 +247,7 @@ class ImageProcessor:
         best_match = None
         best_confidence = 0
         screen_gray = self.capture_screen()
-
+        
         for template_name in self.template_cache:
             location, confidence = self.match_template(template_name, screen_gray, threshold)
             if location and confidence > best_confidence:
@@ -195,6 +258,7 @@ class ImageProcessor:
             template_name, (x, y), confidence = best_match
             x = max(0, min(x, self.screen_width - 1))
             y = max(0, min(y, self.screen_height - 1))
+            
             print(f"[INFO] 匹配到位置: {template_name} @ ({x}, {y}), 置信度: {confidence:.2f}")
             if active_game_window():
                 pyautogui.click(x, y)
@@ -203,7 +267,6 @@ class ImageProcessor:
             else:
                 print(f"[INFO] 游戏窗口未激活，取消点击")
                 return False
-        
         print("[DEBUG] 未找到符合条件的匹配")
         return False
 
@@ -219,7 +282,6 @@ class ImageProcessor:
                 im = ImageGrab.grabclipboard()
                 if not isinstance(im, Image.Image):
                     return False
-            
             elif image_source == 'game_window':
                 print("[DEBUG] 从游戏窗口获取图像")
                 capturer = self._init_window_capturer()
@@ -228,7 +290,6 @@ class ImageProcessor:
                     print("[WARNING] 游戏窗口截图失败")
                     return False
                 im = im.convert('RGB')
-            
             else:
                 print("[WARNING] 无效的图像来源")
                 return False
@@ -273,70 +334,6 @@ class ImageProcessor:
                 print("[DEBUG] 剪贴板已清空")
         except Exception as e:
             print(f"[ERROR] 清空剪贴板出错: {e}")
-
-# 独立函数部分
-def is_game_window_exist():
-    """检查游戏窗口是否存在"""
-    try:
-        return any(window.title == GAME_WINDOW_TITLE for window in gw.getAllWindows())
-    except Exception as e:
-        print(f"[ERROR] 窗口检测失败: {e}")
-        return False
-
-def active_game_window():
-    """激活游戏窗口"""
-    try:
-        windows = gw.getWindowsWithTitle(GAME_WINDOW_TITLE)
-        window = windows[0]
-        if window.isMinimized:
-            window.restore()
-            time.sleep(0.5)
-        window.activate()
-        
-    except Exception as e:
-        print(f"[ERROR] 激活窗口失败: {e}")
-    
-    return True if is_game_window_active() else False
-
-
-def is_game_window_active():
-    """
-    检查指定标题的游戏窗口是否处于激活（焦点）状态。
-    :return: 如果窗口存在且激活返回 True，否则返回 False
-    """
-    try:
-        windows = gw.getWindowsWithTitle(GAME_WINDOW_TITLE)
-        if not windows:
-            print("[DEBUG] 未找到游戏窗口")
-            return False
-            
-        window = windows[0]
-        active_status = window.isActive
-        print(f"[DEBUG] 窗口激活状态检查: {GAME_WINDOW_TITLE} {'已激活' if active_status else '未激活'}")
-        return active_status
-        
-    except Exception as e:
-        print(f"[ERROR] 检查窗口激活状态失败: {e}")
-        return False
-
-def click_center_of_game_window():
-    """
-    激活GAME_WINDOW_TITLE对应窗口并点击中心位置。
-    """
-    if is_game_window_exist():
-        # 获取当前激活的窗口
-        active_window = gw.getActiveWindow()
-        if active_window is None:
-            print("[INFO] 未找到任何激活窗口。")
-            return
-        # 获取窗口的位置和尺寸
-        left, top, width, height = active_window.left, active_window.top, active_window.width, active_window.height
-        # 计算中心点坐标
-        center_x = left + width // 2
-        center_y = top + height // 2
-        # 移动鼠标到窗口中心并点击
-        pyautogui.click(center_x, center_y)
-        print(f"[DEBUG]已点击窗口中心: ({center_x}, {center_y})")
 
 # 初始化全局实例
 image_processor = ImageProcessor()
