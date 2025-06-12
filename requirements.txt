@@ -1,6 +1,6 @@
 flask
 PySide6
-opencv-python
+opencv-python-headless
 numpy
 pillow
 pyautogui
