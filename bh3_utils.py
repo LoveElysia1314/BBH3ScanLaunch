@@ -1,10 +1,8 @@
 # -*- coding: utf-8 -*-
-# 标准库 imports
 import asyncio
 import os
 import re
 import time
-# 第三方库 imports
 import cv2
 import numpy as np
 from ctypes import windll
@@ -16,202 +14,118 @@ from screeninfo import get_monitors
 import win32con
 import win32gui
 import win32ui
-# 自定义库 imports
-import mihoyosdk
+import mihoyosdk  # 确保SDK已安装
 
 # 常量定义
 TEMPLATE_DIR = "Pictures_to_Match"
 SCREENSHOT_DELAY = 0.2  # 截图延迟时间
 GAME_WINDOW_TITLE = "崩坏3"
-DEFAULT_RESOLUTION = 8000  # 默认模板分辨率
-
-def click_center_of_game_window():
-    """
-    激活GAME_WINDOW_TITLE对应窗口并点击中心位置。
-    """
-    if is_game_window_exist():
-        # 获取当前激活的窗口
-        active_window = gw.getActiveWindow()
-        if active_window is None:
-            print("[INFO] 未找到任何激活窗口。")
-            return
-        # 获取窗口的位置和尺寸
-        left, top, width, height = active_window.left, active_window.top, active_window.width, active_window.height
-        # 计算中心点坐标
-        center_x = left + width // 2
-        center_y = top + height // 2
-        # 移动鼠标到窗口中心并点击
-        pyautogui.click(center_x, center_y)
-        print(f"[DEBUG]已点击窗口中心: ({center_x}, {center_y})")
-
-
-def is_game_window_exist():
-    """检查所有窗口中是否存在标题全字匹配GAME_WINDOW_TITLE的窗口"""
-    try:
-        exist = any(window.title == GAME_WINDOW_TITLE for window in gw.getAllWindows())
-        print(f"[DEBUG] 游戏窗口存在检查: {'存在' if exist else '不存在'}")
-        return exist
-    except Exception as e:
-        print(f"[ERROR] 检查窗口存在状态出错: {e}")
-        return False
-
-def active_game_window():
-    """激活指定标题的游戏窗口"""
-    try:
-        windows = gw.getWindowsWithTitle(GAME_WINDOW_TITLE)
-        if not windows:
-            print("[DEBUG] 未找到游戏窗口")
-            return False
-        
-        window = windows[0]
-        if window.isMinimized:
-            print("[DEBUG] 恢复最小化窗口")
-            window.restore()
-            time.sleep(0.5)
-        
-        print("[DEBUG] 激活游戏窗口")
-        window.activate()
-        return True
-    except Exception as e:
-        print(f"[ERROR] 激活窗口出错: {e}")
-        return False
 
 class WindowCapture:
-    """Windows 窗口截图工具类（支持后台窗口截图）"""
-    
+    """窗口截图工具类（支持后台截图）"""
     def __init__(self, window_title):
-        print(f"[DEBUG] 初始化窗口捕获器: {window_title}")
         self.window_title = window_title
         self.hwnd = None
-        self._retry_count = 0
-
-    def _find_window(self):
-        """查找窗口句柄"""
-        self.hwnd = win32gui.FindWindow(None, self.window_title)
-        if self.hwnd:
-            print(f"[DEBUG] 找到窗口句柄: {self.hwnd}")
-            return True
-        print(f"[DEBUG] 未找到窗口: {self.window_title}")
-        return False
 
     def capture_window(self):
-        """截取整个窗口画面（后台窗口）"""
+        """截取指定窗口画面"""
         try:
-            # 确保窗口存在
-            if not self.hwnd and not self._find_window():
-                print("[DEBUG] 无法获取窗口句柄，截图失败")
+            if not self.hwnd:
+                self.hwnd = win32gui.FindWindow(None, self.window_title)
+            if not self.hwnd:
                 return None
                 
-            print("[DEBUG] 开始捕获窗口图像")
-            left, top, right, bot = win32gui.GetWindowRect(self.hwnd)
-            width, height = right - left, bot - top
-            print(f"[DEBUG] 窗口尺寸: {width}x{height}")
-
+            left, top, right, bottom = win32gui.GetWindowRect(self.hwnd)
+            width, height = right - left, bottom - top
+            
             hwndDC = win32gui.GetWindowDC(self.hwnd)
             mfcDC = win32ui.CreateDCFromHandle(hwndDC)
             saveDC = mfcDC.CreateCompatibleDC()
-
             saveBitMap = win32ui.CreateBitmap()
             saveBitMap.CreateCompatibleBitmap(mfcDC, width, height)
             saveDC.SelectObject(saveBitMap)
-
-            # 使用PrintWindow捕获窗口内容
+            
             result = windll.user32.PrintWindow(self.hwnd, saveDC.GetSafeHdc(), 0)
             if not result:
-                print("[DEBUG] PrintWindow调用失败，尝试备选方案")
-                # 备选方案：尝试使用BitBlt
                 saveDC.BitBlt((0, 0), (width, height), mfcDC, (0, 0), win32con.SRCCOPY)
-
-            # 转换为PIL图像
-            bmpinfo = saveBitMap.GetInfo()
-            bmpstr = saveBitMap.GetBitmapBits(True)
+                
+            bmp_info = saveBitMap.GetInfo()
+            bmp_str = saveBitMap.GetBitmapBits(True)
             pil_img = Image.frombuffer(
-                'RGB',
-                (bmpinfo['bmWidth'], bmpinfo['bmHeight']),
-                bmpstr, 'raw', 'BGRX', 0, 1
+                'RGB', 
+                (bmp_info['bmWidth'], bmp_info['bmHeight']),
+                bmp_str, 'raw', 'BGRX', 0, 1
             )
-
+            
             # 清理资源
             win32gui.DeleteObject(saveBitMap.GetHandle())
             saveDC.DeleteDC()
             mfcDC.DeleteDC()
             win32gui.ReleaseDC(self.hwnd, hwndDC)
-
-            print("[DEBUG] 窗口捕获完成")
+            
             return pil_img
+            
         except Exception as e:
-            print(f"[ERROR] 窗口捕获出错: {e}")
-            # 发生错误后重置句柄，下次尝试重新查找
+            print(f"[ERROR] 窗口截图失败: {e}")
             self.hwnd = None
             return None
 
 class ImageProcessor:
-    """图像处理引擎 - 优化版"""
-    
+    """图像处理引擎 - 内存优化版"""
     def __init__(self, template_dir=TEMPLATE_DIR):
         print("[INFO] 初始化图像处理器")
         self.template_dir = template_dir
         self.screen_width, self.screen_height = self._get_screen_resolution()
         print(f"[INFO] 屏幕分辨率: {self.screen_width}x{self.screen_height}")
-        self.template_cache = {}
-        # 延迟初始化窗口捕获器
-        self.window_capturer = None
-        self._load_templates()
+        self.template_cache = {}  # 内存缓存模板
+        self.window_capturer = None  # 延迟初始化窗口捕获器
+        self._load_templates()  # 加载并预处理模板
 
     def _get_screen_resolution(self):
         """获取当前屏幕分辨率"""
         return get_monitors()[0].width, get_monitors()[0].height
 
     def _get_resolution_from_filename(self, filename):
-        """从文件名中提取分辨率信息"""
+        """从文件名中提取分辨率信息（如 4000p）"""
         match = re.search(r'(\d+)p', filename)
-        return int(match.group(1)) if match else DEFAULT_RESOLUTION
+        return int(match.group(1)) if match else None
 
     def _load_templates(self):
-        """智能加载并缩放模板图片"""
-        print("[DEBUG] 开始加载模板")
+        """智能加载并缩放模板图片到内存"""
+        print("[DEBUG] 开始加载模板到内存")
         if not os.path.exists(self.template_dir):
-            print(f"[WARNING] 模板目录不存在: {self.template_dir}")
+            os.makedirs(self.template_dir, exist_ok=True)
+            print(f"[INFO] 已创建模板目录: {self.template_dir}")
             return
-
-        default_dir = os.path.join(self.template_dir, "Default")
-        if not os.path.exists(default_dir):
-            print(f"[WARNING] 默认模板目录不存在: {default_dir}")
-            return
-
-        current_res_dir = os.path.join(self.template_dir, f"{self.screen_height}p")
-        os.makedirs(current_res_dir, exist_ok=True)
-        print(f"[DEBUG] 当前分辨率模板目录: {current_res_dir}")
 
         loaded_count = 0
-        for filename in os.listdir(default_dir):
+        for filename in os.listdir(self.template_dir):
             if not filename.lower().endswith(('.png', '.jpg', '.jpeg')):
                 continue
 
-            src_path = os.path.join(default_dir, filename)
-            dest_path = os.path.join(current_res_dir, filename)
+            file_path = os.path.join(self.template_dir, filename)
             src_resolution = self._get_resolution_from_filename(filename)
+            
+            if not src_resolution:
+                print(f"[WARNING] 跳过文件（缺少有效分辨率标识）: {filename}")
+                continue
+
+            print(f"[DEBUG] 加载模板: {filename} (源分辨率: {src_resolution}p)")
+            template = cv2.imread(file_path, cv2.IMREAD_GRAYSCALE)
+            if template is None:
+                print(f"[WARNING] 无法加载模板: {filename}")
+                continue
+
+            # 计算缩放比例并缩放模板
             scale_factor = self.screen_height / src_resolution
-
-            # 创建或更新缩放模板
-            if not os.path.exists(dest_path) or os.path.getmtime(src_path) > os.path.getmtime(dest_path):
-                print(f"[DEBUG] 创建缩放模板: {filename}")
-                template = cv2.imread(src_path, cv2.IMREAD_GRAYSCALE)
-                if template is None:
-                    print(f"[WARNING] 无法加载模板: {filename}")
-                    continue
-
-                new_size = (int(template.shape[1] * scale_factor), 
-                          int(template.shape[0] * scale_factor))
-                template = cv2.resize(template, new_size)
-                cv2.imwrite(dest_path, template)
-
-            # 加载模板到缓存
-            template = cv2.imread(dest_path, cv2.IMREAD_GRAYSCALE)
-            if template is not None:
-                self.template_cache[filename] = template
-                loaded_count += 1
-                print(f"[DEBUG] 加载模板: {filename} ({template.shape[1]}x{template.shape[0]})")
+            new_size = (int(template.shape[1] * scale_factor), 
+                      int(template.shape[0] * scale_factor))
+            scaled_template = cv2.resize(template, new_size)
+            
+            # 缓存缩放后的模板
+            self.template_cache[filename] = scaled_template
+            loaded_count += 1
+            print(f"[DEBUG] 已缓存模板: {filename} ({new_size[0]}x{new_size[1]})")
 
         print(f"[INFO] 模板加载完成，共加载 {loaded_count} 个模板")
 
@@ -230,6 +144,7 @@ class ImageProcessor:
         if pil_img is None:
             print("[WARNING] 屏幕捕获失败")
             return None
+        
         screen_np = np.array(pil_img)
         return cv2.cvtColor(screen_np, cv2.COLOR_RGB2GRAY)
 
@@ -259,7 +174,6 @@ class ImageProcessor:
             y = max_loc[1] + template.shape[0] // 2
             print(f"[DEBUG] 找到匹配位置: ({x}, {y})")
             return (x, y), max_val
-
         return None, max_val
 
     def match_and_click(self, threshold=0.8):
@@ -281,12 +195,13 @@ class ImageProcessor:
             template_name, (x, y), confidence = best_match
             x = max(0, min(x, self.screen_width - 1))
             y = max(0, min(y, self.screen_height - 1))
+            
             active_game_window()
             asyncio.sleep(0.5)
             print(f"[INFO] 点击匹配位置: {template_name} @ ({x}, {y}), 置信度: {confidence:.2f}")
             pyautogui.click(x, y)
             return True
-
+        
         print("[DEBUG] 未找到符合条件的匹配")
         return False
 
@@ -301,10 +216,8 @@ class ImageProcessor:
                 print("[DEBUG] 从剪贴板获取图像")
                 im = ImageGrab.grabclipboard()
                 if not isinstance(im, Image.Image):
-#                    print("[DEBUG] 剪贴板中没有有效图像")
-#                    self.clear_clipboard()
                     return False
-                    
+            
             elif image_source == 'game_window':
                 print("[DEBUG] 从游戏窗口获取图像")
                 capturer = self._init_window_capturer()
@@ -313,6 +226,7 @@ class ImageProcessor:
                     print("[WARNING] 游戏窗口截图失败")
                     return False
                 im = im.convert('RGB')
+            
             else:
                 print("[WARNING] 无效的图像来源")
                 return False
@@ -321,16 +235,17 @@ class ImageProcessor:
             if not result:
                 print("[DEBUG] 未检测到二维码")
                 return False
-
+            
             url = result[0].data.decode('utf-8')
             print(f"[DEBUG] 解码URL: {url}")
+            
             if 'ticket=' not in url:
                 print("[DEBUG] 无效的二维码格式")
                 return False
-
+                
             ticket = next((p.split('=')[1] for p in url.split('?')[1].split('&') 
-                      if p.startswith('ticket=')))
-
+                          if p.startswith('ticket=')), None)
+                          
             if ticket and config and bh_info:
                 print("[INFO] 检测到有效登陆票据")
                 print("[INFO] 开始扫码验证")
@@ -341,6 +256,7 @@ class ImageProcessor:
                 
             print("[INFO] 缺少必要的登陆信息")
             return False
+            
         except Exception as e:
             print(f"[ERROR] 二维码解析出错: {e}")
             return False
@@ -356,4 +272,51 @@ class ImageProcessor:
         except Exception as e:
             print(f"[ERROR] 清空剪贴板出错: {e}")
 
+# 独立函数部分
+def is_game_window_exist():
+    """检查游戏窗口是否存在"""
+    try:
+        return any(window.title == GAME_WINDOW_TITLE for window in gw.getAllWindows())
+    except Exception as e:
+        print(f"[ERROR] 窗口检测失败: {e}")
+        return False
+
+def active_game_window():
+    """激活游戏窗口"""
+    try:
+        windows = gw.getWindowsWithTitle(GAME_WINDOW_TITLE)
+        if not windows:
+            return False
+            
+        window = windows[0]
+        if window.isMinimized:
+            window.restore()
+            time.sleep(0.5)
+        window.activate()
+        return True
+        
+    except Exception as e:
+        print(f"[ERROR] 激活窗口失败: {e}")
+        return False
+
+def click_center_of_game_window():
+    """
+    激活GAME_WINDOW_TITLE对应窗口并点击中心位置。
+    """
+    if is_game_window_exist():
+        # 获取当前激活的窗口
+        active_window = gw.getActiveWindow()
+        if active_window is None:
+            print("[INFO] 未找到任何激活窗口。")
+            return
+        # 获取窗口的位置和尺寸
+        left, top, width, height = active_window.left, active_window.top, active_window.width, active_window.height
+        # 计算中心点坐标
+        center_x = left + width // 2
+        center_y = top + height // 2
+        # 移动鼠标到窗口中心并点击
+        pyautogui.click(center_x, center_y)
+        print(f"[DEBUG]已点击窗口中心: ({center_x}, {center_y})")
+
+# 初始化全局实例
 image_processor = ImageProcessor()
