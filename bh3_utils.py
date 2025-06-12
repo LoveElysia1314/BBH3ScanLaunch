@@ -1,5 +1,4 @@
 # -*- coding: utf-8 -*-
-import asyncio
 import os
 import re
 import time
@@ -12,7 +11,7 @@ from pyzbar.pyzbar import decode
 import win32con
 import win32gui
 import win32ui
-import mihoyosdk  # 确保SDK已安装
+import mihoyosdk
 
 # 常量定义
 TEMPLATE_DIR = "Pictures_to_Match"
