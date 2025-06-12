@@ -120,6 +120,7 @@ def run_pyinstaller(script_dir, venv_dir, output_dir, tmpdir):
         "--distpath", str(output_dir),
         "--specpath", tmpdir,
         "--noconsole",
+        "--uac-admin",
         "-i", str(script_dir / "BHimage.ico"),
         "--exclude-module", "PyQt5",
         "--exclude-module", "PyQt6", 
