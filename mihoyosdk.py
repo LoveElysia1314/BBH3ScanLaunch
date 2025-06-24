@@ -23,14 +23,14 @@ has_bh_ver = False
 
 
 def bh3Sign(data):
-    # print("data:"+data)
+    """生成崩坏3 API请求的HMAC-SHA256签名"""
     key = '0ebc517adb1b62c6b408df153331f9aa'
     sign = hmac.new(key.encode(), data.encode(), hashlib.sha256).hexdigest()
-    # print("sign:"+sign)
     return sign
 
 
 def makeSign(data):
+    """为API请求数据生成签名并添加到原始数据中"""
     sign = ""
     data2 = ""
     for key in sorted(data):
@@ -38,13 +38,13 @@ def makeSign(data):
             continue
         data2 += f"{key}={data[key]}&"
     data2 = data2.rstrip('&').replace(' ', '')
-    # print("[DEBUG]", data2, sep=" ")
     sign = bh3Sign(data2)
     data['sign'] = sign
     return data
 
 
 async def getBHVer(cache_bh_ver=None):
+    """获取崩坏3当前版本号（优先使用缓存）"""
     global has_bh_ver, local_bh_ver
 
     if has_bh_ver:
@@ -61,6 +61,7 @@ async def getBHVer(cache_bh_ver=None):
 
 
 async def getOAServer(oa_token):
+    """获取崩坏3游戏服务器分发信息"""
     global has_dispatch, local_dispatch
 
     if has_dispatch:
@@ -85,6 +86,7 @@ async def getOAServer(oa_token):
 
 
 async def scanCheck(bh_info, ticket, config):
+    """验证崩坏3登录二维码并触发扫码确认"""
     check = json.loads(scanCheckR)
     check['ticket'] = ticket
     check['ts'] = int(time.time())
@@ -100,6 +102,7 @@ async def scanCheck(bh_info, ticket, config):
 
 
 async def scanConfirm(bhinfoR, ticket, config):
+    """确认崩坏3二维码扫描并完成登录流程"""
     bhinfo = bhinfoR['data']
     # print("[DEBUG]", bhinfo, sep=" ")
     scan_result = json.loads(scanResultR)
@@ -135,6 +138,7 @@ async def scanConfirm(bhinfoR, ticket, config):
 
 
 async def verify(uid, access_key):
+    """验证B站账号并获取崩坏3登录令牌"""
     print("[DEBUG]", f'verify with uid={uid}', sep=" ")
     data = json.loads(verifyData)
     data['uid'] = uid

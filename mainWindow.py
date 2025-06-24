@@ -6,6 +6,10 @@ from PySide6.QtWidgets import (QDialog, QDialogButtonBox, QLabel, QLineEdit,
 
 
 class LoginDialog(QDialog):
+    """
+    账号登录对话框
+    提供B站账号和密码输入表单，用于用户认证
+    """
     def __init__(self, parent=None):
         super(LoginDialog, self).__init__(parent)
         self.setWindowTitle('登陆账号')
@@ -28,7 +32,7 @@ class LoginDialog(QDialog):
         self.adjustSize()
     
     def create_form_controls(self, layout):
-        """创建表单控件"""
+        """创建账号密码输入表单控件"""
         fields = [
             ("账号:", "account", "请输入账号"),
             ("密码:", "password", "请输入密码")
@@ -55,6 +59,10 @@ class LoginDialog(QDialog):
 
 
 class Ui_MainWindow:
+    """
+    主窗口UI布局
+    包含日志显示区、功能说明区和控制面板，用于崩坏3扫码登录器
+    """
     def setupUi(self, MainWindow):
         MainWindow.setObjectName("MainWindow")
         MainWindow.setAttribute(Qt.WidgetAttribute.WA_Resized, True)
@@ -80,7 +88,7 @@ class Ui_MainWindow:
         QtCore.QMetaObject.connectSlotsByName(MainWindow)
 
     def create_left_area(self):
-        """创建左侧区域"""
+        """创建包含日志和说明的左侧面板"""
         self.leftContainer = QtWidgets.QWidget()
         left_layout = QtWidgets.QVBoxLayout(self.leftContainer)
         left_layout.setSpacing(15)
@@ -114,7 +122,7 @@ class Ui_MainWindow:
         self.mainLayout.addWidget(self.leftContainer, 3)
 
     def create_control_panel(self):
-        """创建右侧控制面板"""
+        """创建包含账号设置和功能控制的右侧面板"""
         self.controlGroup = QtWidgets.QGroupBox("控制面板")
         controlLayout = QtWidgets.QVBoxLayout(self.controlGroup)
         controlLayout.setSpacing(15)
@@ -139,7 +147,7 @@ class Ui_MainWindow:
         self.mainLayout.addWidget(self.controlGroup, 1)
 
     def create_account_group(self, layout):
-        """创建账号设置组"""
+        """创建B站账号和游戏路径设置区域"""
         self.accountGroup = QtWidgets.QGroupBox("账号设置")
         gridLayout = QtWidgets.QGridLayout(self.accountGroup)
         gridLayout.setContentsMargins(10, 10, 10, 10)
@@ -167,7 +175,7 @@ class Ui_MainWindow:
         layout.addWidget(self.accountGroup)
 
     def create_features_group(self, layout):
-        """创建功能设置组"""
+        """创建二维码解析和自动操作功能开关区域"""
         self.featureGroup = QtWidgets.QGroupBox("功能设置")
         gridLayout = QtWidgets.QGridLayout(self.featureGroup)
         gridLayout.setContentsMargins(10, 12, 10, 12)
@@ -195,7 +203,7 @@ class Ui_MainWindow:
         layout.addWidget(self.featureGroup)
 
     def create_auto_login_group(self, layout):
-        """创建自动化组"""
+        """创建游戏启动和一键登录按钮区域"""
         self.autoLoginGroup = QtWidgets.QGroupBox("自动化")
         autoLoginLayout = QVBoxLayout(self.autoLoginGroup)
         autoLoginLayout.setContentsMargins(10, 10, 10, 10)
@@ -216,6 +224,7 @@ class Ui_MainWindow:
         layout.addWidget(self.autoLoginGroup)
 
     def get_help_text(self):
+        """返回程序使用说明的HTML格式文本"""
         return (
             "第一次使用需要点击登陆按钮登陆B站账号，账号密码会储存在配置文件内；<br>"
             "第一次使用“一键登陆崩坏3”（需要以管理员身份运行）需要点击\"配置路径\"并选择\"BH3.exe\；<br>"
@@ -227,11 +236,13 @@ class Ui_MainWindow:
         )
 
     def retranslateUi(self, MainWindow):
+        """设置窗口标题和初始化文本"""
         _translate = QtCore.QCoreApplication.translate
         MainWindow.setWindowTitle(_translate("MainWindow", "B服崩坏3扫码登陆器 v.2.1.2"))
         self.logText.setPlainText("系统初始化完成，等待操作...")
 
     def connectSignals(self, MainWindow):
+        """连接所有按钮和复选框的信号与槽函数"""
         self.loginBiliBtn.clicked.connect(MainWindow.login)
         self.clipCheck.clicked.connect(
             lambda checked: MainWindow.toggle_feature('clip_check', self.clipCheck, "当前状态")

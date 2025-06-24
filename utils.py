@@ -5,9 +5,11 @@ import sys
 from PySide6.QtCore import Signal, QObject
 
 
-# ========== DummyWriter 和 EmittingStream 类：用于拦截 stdout 输出 ==========
-
 class DummyWriter:
+    """
+    虚拟输出写入器
+    在无控制台模式下替代标准输出，防止输出到终端
+    """
     def write(self, text):
         pass
 
@@ -15,6 +17,10 @@ class DummyWriter:
         pass
 
 class EmittingStream(QObject):
+    """
+    输出重定向流
+    将标准输出重定向到GUI界面，支持调试信息过滤
+    """
     textWritten = Signal(str)
 
     def __init__(self):
@@ -35,6 +41,7 @@ class EmittingStream(QObject):
             self.show_debug_terminal = True
 
     def write(self, text):
+        """处理输出文本，根据配置决定是否发送到GUI和终端"""
         # 先缓存文本
         self._buffer += text
 
@@ -59,6 +66,7 @@ class EmittingStream(QObject):
                     self.original_stdout.flush()
 
     def flush(self):
+        """刷新缓冲区，处理剩余未输出的内容"""
         # 处理缓冲区最后的内容（可能没有换行）
         if self._buffer:
             full_line = self._buffer
@@ -75,6 +83,7 @@ class EmittingStream(QObject):
                 self.original_stdout.flush()
 
     def get_caller_info(self):
+        """获取调用者信息（文件名和行号），用于调试"""
         import inspect
         frame = inspect.currentframe()
         try:

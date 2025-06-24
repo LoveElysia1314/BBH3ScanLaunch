@@ -14,12 +14,12 @@ import win32ui
 import mihoyosdk
 
 # 常量定义
-TEMPLATE_DIR = "Pictures_to_Match"
+TEMPLATE_DIR = "Pictures_to_Match"  # 模板图片目录
 SCREENSHOT_DELAY = 0.2  # 截图延迟时间
-GAME_WINDOW_TITLE = "崩坏3"
+GAME_WINDOW_TITLE = "崩坏3"  # 游戏窗口标题
 
 def is_game_window_exist():
-    """检查所有窗口中是否存在标题全字匹配GAME_WINDOW_TITLE的窗口"""
+    """检查崩坏3游戏窗口是否存在"""
     try:
         def enum_windows(hwnd, results):
             if win32gui.IsWindowVisible(hwnd):
@@ -36,7 +36,7 @@ def is_game_window_exist():
         return False
 
 def active_game_window():
-    """激活指定标题的游戏窗口"""
+    """激活崩坏3游戏窗口并置于前台"""
     try:
         hwnd = win32gui.FindWindow(None, GAME_WINDOW_TITLE)
         if not hwnd:
@@ -56,9 +56,7 @@ def active_game_window():
         return False
 
 def click_center_of_game_window():
-    """
-    激活GAME_WINDOW_TITLE对应窗口并点击中心位置。
-    """
+    """点击崩坏3游戏窗口中心位置"""
     if is_game_window_exist():
         hwnd = win32gui.FindWindow(None, GAME_WINDOW_TITLE)
         if not hwnd:
@@ -75,7 +73,10 @@ def click_center_of_game_window():
         print(f"[DEBUG]已点击窗口中心: ({center_x}, {center_y})")
 
 class WindowCapture:
-    """Windows 窗口截图工具类（支持后台窗口截图）"""
+    """
+    后台窗口截图工具类
+    使用Windows API实现后台窗口截图功能，支持对崩坏3游戏窗口的截图
+    """
     def __init__(self, window_title):
         print(f"[DEBUG] 初始化窗口捕获器: {window_title}")
         self.window_title = window_title
@@ -83,7 +84,7 @@ class WindowCapture:
         self._retry_count = 0
 
     def _find_window(self):
-        """查找窗口句柄"""
+        """查找崩坏3游戏窗口句柄"""
         self.hwnd = win32gui.FindWindow(None, self.window_title)
         if self.hwnd:
             print(f"[DEBUG] 找到窗口句柄: {self.hwnd}")
@@ -92,7 +93,7 @@ class WindowCapture:
         return False
 
     def capture_window(self):
-        """截取整个窗口画面（后台窗口）"""
+        """截取整个游戏窗口画面（支持后台窗口）"""
         try:
             if not self.hwnd and not self._find_window():
                 print("[DEBUG] 无法获取窗口句柄，截图失败")
@@ -130,7 +131,10 @@ class WindowCapture:
             return None
 
 class ImageProcessor:
-    """图像处理引擎 - 内存优化版"""
+    """
+    图像处理引擎
+    提供模板匹配、屏幕捕获和二维码识别功能，用于崩坏3游戏界面识别
+    """
     def __init__(self, template_dir=TEMPLATE_DIR):
         print("[INFO] 初始化图像处理器")
         self.template_dir = template_dir
@@ -141,16 +145,16 @@ class ImageProcessor:
         self._load_templates()
 
     def _get_screen_resolution(self):
-        """获取当前屏幕分辨率"""
+        """获取主屏幕分辨率"""
         return windll.user32.GetSystemMetrics(0), windll.user32.GetSystemMetrics(1)
 
     def _get_resolution_from_filename(self, filename):
-        """从文件名中提取分辨率信息（如 4000p）"""
+        """从模板文件名中提取分辨率信息"""
         match = re.search(r'(\d+)p', filename)
         return int(match.group(1)) if match else None
 
     def _load_templates(self):
-        """智能加载并缩放模板图片到内存"""
+        """加载模板图片并缩放到当前屏幕分辨率"""
         print("[DEBUG] 开始加载模板到内存")
         if not os.path.exists(self.template_dir):
             os.makedirs(self.template_dir, exist_ok=True)
@@ -189,14 +193,14 @@ class ImageProcessor:
         print(f"[INFO] 模板加载完成，共加载 {loaded_count} 个模板")
 
     def _init_window_capturer(self):
-        """初始化窗口捕获器（延迟初始化）"""
+        """初始化崩坏3游戏窗口捕获器（延迟加载）"""
         if self.window_capturer is None:
             print("[INFO] 初始化窗口捕获器")
             self.window_capturer = WindowCapture(GAME_WINDOW_TITLE)
         return self.window_capturer
 
     def capture_screen(self):
-        """高效屏幕捕获（整个游戏窗口）"""
+        """捕获整个崩坏3游戏窗口的灰度图像"""
         print("[DEBUG] 开始屏幕捕获")
         capturer = self._init_window_capturer()
         pil_img = capturer.capture_window()
@@ -208,12 +212,7 @@ class ImageProcessor:
         return cv2.cvtColor(screen_np, cv2.COLOR_RGB2GRAY)
 
     def match_template(self, template_name, screen_gray, threshold=0.8):
-        """
-        单尺度模板匹配
-        :param template_name: 模板文件名
-        :param threshold: 匹配阈值
-        :return: 匹配位置和置信度，或(None, 0)
-        """
+        """在屏幕图像中匹配指定模板，返回匹配位置和置信度"""
         #print(f"[DEBUG] 开始模板匹配: {template_name}")
         if template_name not in self.template_cache:
             print(f"[WARNING] 模板不存在: {template_name}")
@@ -235,10 +234,7 @@ class ImageProcessor:
         return None, max_val
 
     def match_and_click(self, threshold=0.8):
-        """
-        遍历模板目录下的所有图片，点击置信度最高的匹配结果
-        :return: 是否成功点击
-        """
+        """匹配所有模板并点击置信度最高的位置（若激活游戏窗口成功）"""
         print("[DEBUG] 开始模板匹配点击流程")
         best_match = None
         best_confidence = 0
@@ -267,11 +263,7 @@ class ImageProcessor:
         return False
 
     async def parse_qr_code(self, image_source="clipboard", config=None, bh_info=None):
-        """
-        解析二维码并处理崩坏3登陆
-        :param image_source: 图片来源 'clipboard' 或 'game_window'
-        :return: 是否成功解析
-        """
+        """从剪贴板或游戏窗口解析二维码并完成崩坏3登录"""
         try:
             if image_source == 'clipboard':
                 print("[DEBUG] 从剪贴板获取图像")
@@ -321,7 +313,7 @@ class ImageProcessor:
             return False
 
     def clear_clipboard(self):
-        """清空剪贴板"""
+        """清空系统剪贴板内容"""
         try:
             print("[DEBUG] 清空剪贴板")
             if windll.user32.OpenClipboard(None):
