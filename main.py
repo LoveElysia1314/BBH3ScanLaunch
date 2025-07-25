@@ -6,11 +6,10 @@ import subprocess
 import webbrowser
 from threading import Thread
 from flask import Flask, abort, render_template, request
-import PySide6
+import logging
 from PySide6.QtCore import QThread, Signal, QTimer
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QApplication, QMainWindow, QFileDialog, QMessageBox
-
 import bsgamesdk
 import mihoyosdk
 import mainWindow
@@ -24,7 +23,7 @@ config_manager = ConfigManager()
 # ========== 登陆线程 ==========
 class LoginThread(QThread):
     update_log = Signal(str)
-    login_complete = Signal(bool)
+    login_complete = Signal(bool) # 登录完成信号，传递成功/失败状态
 
     async def login(self):
         print("[INFO] 登陆B站账号中...")
@@ -44,6 +43,8 @@ class LoginThread(QThread):
                 bs_info = await bsgamesdk.login(config['account'], config['password'], config_manager.cap)
                 if "access_key" not in bs_info:
                     self.handle_login_failure(bs_info)
+                    # 发出信号，即使失败也要通知主线程登录流程结束
+                    self.login_complete.emit(False)
                     return
                 bs_user_info = await bsgamesdk.getUserInfo(bs_info['uid'], bs_info['access_key'])
                 print(f"[INFO] 登陆B站账号 {bs_user_info['uname']} 成功！")
@@ -54,7 +55,6 @@ class LoginThread(QThread):
                     'uname': bs_user_info["uname"]
                 })
                 config_manager.write_conf(config)
-
             print("[INFO] 登陆崩坏3账号中...")
             bh_info = await mihoyosdk.verify(bs_info['uid'], bs_info['access_key'])
             config_manager.bh_info = bh_info
@@ -62,13 +62,9 @@ class LoginThread(QThread):
                 print(f"[INFO] 登陆失败！{bh_info}")
                 self.login_complete.emit(False)
                 return
-
-            print("[INFO] 登陆成功！")
-            print("[INFO] 获取OA服务器信息中...")
-            
+            print("[INFO] 登陆成功！获取OA服务器信息中...")
             # 获取服务器版本号
             server_bh_ver = await mihoyosdk.getBHVer(config_manager.bh_ver)
-            
             # 检查版本是否匹配
             if server_bh_ver != config_manager.bh_ver:
                 print(f"[INFO] 版本不匹配 (本地: {config_manager.bh_ver}, 服务器: {server_bh_ver})，更新oa_token.json...")
@@ -78,27 +74,23 @@ class LoginThread(QThread):
                     print(f"[INFO] 已更新oa_token.json (新版本: {config_manager.bh_ver})")
                 else:
                     print("[WARNING] oa_token.json更新失败，使用现有版本")
-            
             print(f"[INFO] 当前崩坏3版本: {config_manager.bh_ver}")
-            
             # 使用更新后的oa_token
             oa = await mihoyosdk.getOAServer(config_manager.oa_token)
             if len(oa) < 100:
                 print("[INFO] 获取OA服务器失败！请检查Token后重试")
                 self.login_complete.emit(False)
                 return
-
             print("[INFO] 获取OA服务器成功！")
             ui.loginBiliBtn.setText("账号已登陆")
             config['account_login'] = True
             config_manager.write_conf(config)
             self.login_complete.emit(True)
-
         except Exception as e:
             print(f"[ERROR] 登陆过程中发生错误: {str(e)}")
             ui.loginBiliBtn.setText("登陆失败")
             ui.loginBiliBtn.setDisabled(False)
-            self.login_complete.emit(False)
+            self.login_complete.emit(False) # 异常时也发出信号
 
     def handle_login_failure(self, bs_info):
         if 'message' in bs_info:
@@ -107,17 +99,15 @@ class LoginThread(QThread):
                 print("[INFO] 账号或密码错误！")
             else:
                 print(f"[INFO] 原始返回：{bs_info['message']}")
-
         if 'need_captch' in bs_info:
             print("[INFO] 需要验证码！请打开下方网址进行操作！")
             print(f"[INFO] {bs_info['cap_url']}")
             webbrowser.open_new(bs_info['cap_url'])
         else:
             print(f"[INFO] 登陆失败！{bs_info}")
-
         ui.loginBiliBtn.setText("登陆账号")
         ui.loginBiliBtn.setDisabled(False)
-        self.login_complete.emit(False)
+        # 注意：这里不再 emit False，因为 login() 函数中已经 emit 了
 
     def run(self):
         asyncio.run(self.login())
@@ -145,7 +135,6 @@ class ParseThread(QThread):
                 else:
                     #print("[DEBUG] 崩坏3窗口不存在，跳过图像识别和点击")
                     pass
-
             if config['auto_clip']:
                 try:
                     if not is_game_window_exist():
@@ -173,14 +162,12 @@ class ParseThread(QThread):
                             return
                 except Exception as e:
                     print(f"[ERROR] 自动截屏时出错: {str(e)}")
-
             if config['clip_check'] and config.get('account_login', False):
                 await image_processor.parse_qr_code(
                     image_source='clipboard',
                     config=config,
                     bh_info=config_manager.bh_info
                 )
-
             await asyncio.sleep(config['sleep_time'])
 
     def run(self):
@@ -188,10 +175,31 @@ class ParseThread(QThread):
 
 # ========== 登陆按钮点击回调 ==========
 def login_accept():
+    # 创建并启动登录线程
     ui.backendLogin = LoginThread()
     ui.backendLogin.update_log.connect(print)
+    # 连接登录完成信号到主窗口的处理函数
     ui.backendLogin.login_complete.connect(window.handle_login_complete)
+    # 连接登录完成信号到启动解析线程的函数
+    ui.backendLogin.login_complete.connect(start_parse_thread_after_login)
     ui.backendLogin.start()
+
+# ========== 新增：启动解析线程的函数 ==========
+def start_parse_thread_after_login(success):
+    # 无论登录成功与否，都启动 ParseThread
+    # 如果有特定逻辑需要登录成功才启动，可以在这里添加 if success: 判断
+    print("[INFO] 登录流程完成，准备启动解析线程...")
+    # 确保旧的线程被正确处理（如果存在）
+    if hasattr(ui, 'backendClipCheck') and ui.backendClipCheck.isRunning():
+        print("[WARNING] 解析线程已在运行中？")
+        return
+
+    # 创建并启动解析线程
+    ui.backendClipCheck = ParseThread()
+    ui.backendClipCheck.update_log.connect(print)
+    ui.backendClipCheck.exit_app.connect(lambda: (window.restoreOriginalSettings(), app.quit()))
+    ui.backendClipCheck.start()
+    print("[INFO] 解析线程已启动")
 
 # ========== 主窗口类 ==========
 class SelfMainWindow(QMainWindow):
@@ -202,9 +210,11 @@ class SelfMainWindow(QMainWindow):
         self.temp_mode = False
 
     def handle_login_complete(self, success):
+        # 登录完成后，解析线程将在 start_parse_thread_after_login 中启动,这里只负责更新UI状态
         status = "账号已登陆" if success else "登陆失败"
         ui.loginBiliBtn.setText(status)
         ui.loginBiliBtn.setDisabled(False)
+        # print(f"[INFO] 登录UI状态已更新为: {status}")
 
     def login(self):
         config = config_manager.config
@@ -212,11 +222,9 @@ class SelfMainWindow(QMainWindow):
             print("[INFO] 账号已登陆")
             ui.loginBiliBtn.setText("账号已登陆")
             return
-
         print("[INFO] 开始登陆账号")
         ui.loginBiliBtn.setText("登陆中")
         ui.loginBiliBtn.setDisabled(True)
-
         dialog = mainWindow.LoginDialog(self)
         dialog.account.textChanged.connect(self.deal_config_update('account'))
         dialog.password.textChanged.connect(self.deal_config_update('password'))
@@ -300,15 +308,20 @@ if __name__ == '__main__':
     config = config_manager.config
     stream.show_debug_gui = config['debug_print'] # 调整信息输出级别
     sys.stdout = stream
-
     app = QApplication(sys.argv)
     window = SelfMainWindow()
     ui = mainWindow.Ui_MainWindow()
     ui.setupUi(window)
-
     stream.textWritten.connect(lambda text: ui.logText.append(text))
-
     fapp = Flask(__name__)
+
+    # 禁用 Werkzeug 的日志
+    log = logging.getLogger('werkzeug')
+    log.setLevel(logging.ERROR)
+
+    # 禁用 Flask 的启动信息
+    cli = sys.modules['flask.cli']
+    cli.show_server_banner = lambda *x: None
 
     @fapp.route("/")
     def index():
@@ -335,7 +348,6 @@ if __name__ == '__main__':
     )
     flaskThread.start()
 
-
     if config['account']:
         print("[INFO] 配置文件已有账号，尝试登陆中...")
         login_accept()
@@ -351,11 +363,6 @@ if __name__ == '__main__':
         window.update_status_text(checkbox, prefix)
 
     ui.configGamePathBtn.setText("路径已配置" if config.get('game_path') else "点击配置")
-
-    ui.backendClipCheck = ParseThread()
-    ui.backendClipCheck.update_log.connect(print)
-    ui.backendClipCheck.exit_app.connect(lambda: (window.restoreOriginalSettings(), app.quit()))
-    ui.backendClipCheck.start()
 
     window.show()
 
