@@ -1,0 +1,10 @@
+flask
+PySide6
+opencv-python-headless
+numpy
+pillow
+pyautogui
+pyzbar
+pywin32
+cryptography
+requests
