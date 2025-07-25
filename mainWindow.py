@@ -187,7 +187,8 @@ class Ui_MainWindow:
             ("解析二维码:", "clipCheck"),
             ("自动截屏:", "autoClipCheck"),
             ("自动退出:", "autoCloseCheck"),
-            ("自动点击:", "autoClick")
+            ("自动点击:", "autoClick"),
+            ("DEBUG:", "debugPrint")
         ]
         
         for row, (label_text, attr_name) in enumerate(checkboxes):
@@ -255,6 +256,9 @@ class Ui_MainWindow:
         )
         self.autoClick.clicked.connect(
             lambda checked: MainWindow.toggle_feature('auto_switch_mode', self.autoClick, "当前状态")
+        )
+        self.debugPrint.clicked.connect(
+            lambda checked: MainWindow.toggle_feature('debug_print', self.debugPrint, "当前状态")
         )
         self.configGamePathBtn.clicked.connect(MainWindow.configGamePath)
         self.launchGameBtn.clicked.connect(MainWindow.launchGame)

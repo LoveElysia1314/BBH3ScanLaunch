@@ -11,18 +11,19 @@ import time
 class ConfigManager:
     # 默认配置模板（移除了oa_token、bh_ver和ver字段）
     DEFAULT_CONFIG = {
+        "sleep_time": 1,
         "account": "",
         "password": "",
-        "sleep_time": 1,
-        "clip_check": False,
-        "auto_close": False,
         "uid": 0,
         "access_key": "",
-        "last_login_succ": False,
         "uname": "",
-        "auto_clip": False,
         "game_path": "",
-        "auto_click": False
+        "last_login_succ": False,
+        "clip_check": False,
+        "auto_close": False,
+        "auto_clip": False,
+        "auto_click": False,
+        "debug_print": False
     }
 
     def __init__(self):

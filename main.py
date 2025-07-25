@@ -138,13 +138,13 @@ class ParseThread(QThread):
         while True:
             config = config_manager.config
             if config['auto_click']:
-                    if not self.is_admin():
-                        print("[INFO] 没有管理员权限，跳过图形识别和点击")
-                    elif is_game_window_exist():
-                        image_processor.match_and_click()
-                    else:
-                        #print("[DEBUG] 崩坏3窗口不存在，跳过图像识别和点击")
-                        pass
+                if not self.is_admin():
+                    print("[INFO] 没有管理员权限，跳过图形识别和点击")
+                elif is_game_window_exist():
+                    image_processor.match_and_click()
+                else:
+                    #print("[DEBUG] 崩坏3窗口不存在，跳过图像识别和点击")
+                    pass
 
             if config['auto_clip']:
                 try:
@@ -263,7 +263,7 @@ class SelfMainWindow(QMainWindow):
         self.launchGame()
         self.temp_mode = True
         config = config_manager.config
-        for feature in ['clip_check', 'auto_clip', 'auto_close', 'auto_click']:
+        for feature in ['clip_check', 'auto_clip', 'auto_close', 'auto_click', 'debug_print']:
             self.prev_settings[feature] = config.get(feature, False)
             config[feature] = True
         config_manager.write_conf(config)
@@ -288,7 +288,7 @@ class SelfMainWindow(QMainWindow):
             (ui.clipCheck, 'clip_check', "当前状态"),
             (ui.autoClipCheck, 'auto_clip', "当前状态"),
             (ui.autoCloseCheck, 'auto_close', "当前状态"),
-            (ui.autoClick, 'auto_click', "当前状态")
+            (ui.autoClick, 'auto_click', "当前状态"),
         ]:
             checkbox.setChecked(config.get(feature, False))
             self.update_status_text(checkbox, prefix)
@@ -297,6 +297,8 @@ class SelfMainWindow(QMainWindow):
 # ========== Flask 启动 ==========
 if __name__ == '__main__':
     stream = EmittingStream()
+    config = config_manager.config
+    stream.show_debug_gui = config['debug_print'] # 调整信息输出级别
     sys.stdout = stream
 
     app = QApplication(sys.argv)
@@ -333,7 +335,7 @@ if __name__ == '__main__':
     )
     flaskThread.start()
 
-    config = config_manager.config
+
     if config['account']:
         print("[INFO] 配置文件已有账号，尝试登陆中...")
         login_accept()
@@ -342,7 +344,8 @@ if __name__ == '__main__':
         (ui.clipCheck, 'clip_check', "当前状态"),
         (ui.autoCloseCheck, 'auto_close', "当前状态"),
         (ui.autoClipCheck, 'auto_clip', "当前状态"),
-        (ui.autoClick, 'auto_click', "当前状态")
+        (ui.autoClick, 'auto_click', "当前状态"),
+        (ui.debugPrint, 'debug_print', "当前状态")
     ]:
         checkbox.setChecked(config.get(feature, False))
         window.update_status_text(checkbox, prefix)
