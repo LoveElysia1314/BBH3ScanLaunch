@@ -239,7 +239,7 @@ class Ui_MainWindow:
     def retranslateUi(self, MainWindow):
         """设置窗口标题和初始化文本"""
         _translate = QtCore.QCoreApplication.translate
-        MainWindow.setWindowTitle(_translate("MainWindow", "B服崩坏3扫码登陆器 v1.0"))
+        MainWindow.setWindowTitle(_translate("MainWindow", "B服崩坏3扫码登陆器 v1.1"))
         self.logText.setPlainText("系统初始化完成，等待操作...")
 
     def connectSignals(self, MainWindow):

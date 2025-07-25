@@ -190,7 +190,7 @@ def create_windows_shortcuts(app_dir, exe_name):
 
 def create_clean_package(output_dir):
     """创建压缩包"""
-    zip_file = output_dir.parent / "BBH3ScanLaunch v1.0.zip"
+    zip_file = output_dir.parent / "BBH3ScanLaunch v1.1.zip"
     zip_file.unlink(missing_ok=True)
     
     print(f"正在创建压缩包: {zip_file}")
