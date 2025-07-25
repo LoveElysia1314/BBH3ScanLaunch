@@ -56,7 +56,7 @@ async def sendBiliPost(url, data):
             print("[INFO] 请求错误，3s后重试...")
             await asyncio.sleep(3)
             return await sendBiliPost(url, data)
-        print("[DEBUG]", res.json(),sep=" ")
+        # print("[DEBUG]", res.json(),sep=" ")
         return res.json()
     except Exception as e:
         print(f"[ERROR] B站POST请求失败: {e}")

@@ -53,7 +53,7 @@ class EmittingStream(QObject):
             self._repeat_counts[line] += 1
             
             # 如果重复超过2次，就过滤掉
-            if self._repeat_counts[line] >= 2:
+            if self._repeat_counts[line] >= 1:
                 return
         else:
             # 新行，重置计数
