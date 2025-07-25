@@ -1,0 +1,42 @@
+name: Update Release Config
+
+on:
+  push:
+    branches: [main]
+    paths: ['oa_token.json']
+
+jobs:
+  update-release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Get Latest Release
+        id: get-release
+        uses: actions/github-script@v6
+        with:
+          script: |
+            try {
+              // 修复语法：使用标准JS注释
+              const response = await github.rest.repos.getLatestRelease({
+                owner: context.repo.owner,
+                repo: context.repo.repo
+              });
+              return response.data.tag_name;  // 直接获取release标签名
+            } catch (error) {
+              core.setFailed(`获取Release失败: ${error.message}`);
+            }
+          result-encoding: string
+
+      - name: Upload Config to Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.get-release.outputs.result }}
+          files: oa_token.json
+          replace_existing: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
