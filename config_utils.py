@@ -7,33 +7,38 @@ import requests
 from urllib.parse import urlparse
 import concurrent.futures
 import time
+from network_utils import network_manager  # 导入新的网络模块
 
 class ConfigManager:
-    # 默认配置模板（移除了oa_token、bh_ver和ver字段）
+    # 默认配置模板
     DEFAULT_CONFIG = {
+        "game_path": "",
         "sleep_time": 1,
         "account": "",
         "password": "",
         "uid": 0,
         "access_key": "",
         "uname": "",
-        "game_path": "",
         "last_login_succ": False,
         "clip_check": False,
         "auto_close": False,
         "auto_clip": False,
         "auto_click": False,
-        "debug_print": False
+        "debug_print": False,
+        "program_version": "1.0.0"  # 添加程序版本字段
     }
 
     def __init__(self):
         self.lock = threading.Lock()
         self.m_cast_group_ip = '239.0.1.255'
-        self.oa_token_path = './oa_token.json'  # 文件名改为oa_token.json
+        self.oa_token_path = './oa_token.json'
         self.m_cast_group_port = 12585
         self.bh_info = {}
         self.data = {}
         self.cap = None
+        
+        # 设置当前程序版本
+        network_manager.set_current_version(self.DEFAULT_CONFIG.get("program_version", "1.0.0"))
         
         self._ensure_oa_token_file()
         # 从oa_token.json读取oa_token和bh_ver
@@ -90,6 +95,9 @@ class ConfigManager:
                     with open(config_path, 'w') as f:
                         json.dump(merged_config, f, indent=4)
                 
+                # 更新网络管理器的版本
+                network_manager.set_current_version(merged_config.get("program_version", "1.0.0"))
+                
                 return merged_config
                 
         except (JSONDecodeError, FileNotFoundError) as e:
@@ -98,7 +106,7 @@ class ConfigManager:
             return self.DEFAULT_CONFIG.copy()
 
     def write_conf(self, old=None):
-        """写入配置文件（过滤掉oa_token和bh_ver）"""
+        """写入配置文件"""
         with self.lock:
             # 从旧配置中提取有效字段
             config_temp = self.DEFAULT_CONFIG.copy()
@@ -113,57 +121,62 @@ class ConfigManager:
             self.config = config_temp
 
     def download_oa_token(self):
-        """并行下载oa_token.json文件，选择最快的可用源"""
-        print(f'[INFO] 开始下载文件\"oa_token.json\"')
-        original_url = "https://cdn.jsdelivr.net/gh/LoveElysia1314/BBH3ScanLaunch@main/oa_token.json"
-        mirrors = [
-            "https://cdn.jsdelivr.net",
-            "https://gcore.jsdelivr.net",
-            "https://fastly.jsdelivr.net",
-            "https://jsd.onmicrosoft.cn",
-            "https://jsd.cdn.zzko.cn"
-        ]
-        
-        def fetch_mirror(mirror_url):
-            try:
-                start_time = time.time()
-                response = requests.get(
-                    mirror_url,
-                    timeout=2,
-                    headers={"User-Agent": "Mozilla/5.0"}
-                )
-                if response.status_code == 200:
-                    return {
-                        'url': mirror_url,
-                        'content': response.content,
-                        'time': time.time() - start_time,
-                        'success': True
-                    }
-            except Exception:
-                pass
-            return {'url': mirror_url, 'success': False}
-        
-        mirror_urls = [f"{mirror}{urlparse(original_url).path}" for mirror in mirrors]
-        
-        with concurrent.futures.ThreadPoolExecutor() as executor:
-            futures = [executor.submit(fetch_mirror, url) for url in mirror_urls]
-            results = []
+        """下载oa_token.json文件"""
+        try:
+            # 使用网络管理器的并行下载功能
+            oa_token, bh_ver = network_manager.get_oa_token_parallel()
             
-            for i, future in enumerate(concurrent.futures.as_completed(futures), 1):
-                result = future.result()
-                if not result['success']:
-                    continue
+            # 更新实例变量
+            self.oa_token = oa_token
+            self.bh_ver = bh_ver
+            
+            # 保存到文件
+            token_data = {"oa_token": oa_token, "bh_ver": bh_ver}
+            with open(self.oa_token_path, 'w') as f:
+                json.dump(token_data, f)
                 
-                results.append(result)
-                # 只要有一个成功就立即使用最快的
-                if results:
-                    fastest = min(results, key=lambda x: x['time'])
-                    with open(self.oa_token_path, 'wb') as f:
-                        f.write(fastest['content'])
-                    print(f'[INFO] 使用源: {fastest["url"]}')
-                    print(f'[INFO] 文件已保存: {self.oa_token_path}')
-                    return True
-        
-        print('[WARNING] 所有源均无法访问，下载文件\"oa_token.json\"失败')
-        return False
+            return True
+        except Exception as e:
+            print(f'[ERROR] 下载OA Token失败: {e}')
+            return False
     
+    def check_program_update(self):
+        """检查程序更新"""
+        return network_manager.check_program_update()
+    
+    def download_program_update(self, progress_callback=None):
+        """下载程序更新"""
+        update_info = self.check_program_update()
+        if update_info.get("has_update"):
+            return network_manager.download_update(
+                update_info["download_url"], 
+                progress_callback
+            )
+        return None
+    
+    def install_program_update(self, new_file_path):
+        """安装程序更新"""
+        return network_manager.install_update(new_file_path)
+    
+    def get_program_version(self):
+        """获取当前程序版本"""
+        return self.config.get("program_version", "1.0.0")
+    
+    def set_program_version(self, version_str):
+        """设置程序版本"""
+        self.config["program_version"] = version_str
+        network_manager.set_current_version(version_str)
+        self.write_conf(self.config)
+
+# 使用示例
+if __name__ == "__main__":
+    # 创建配置管理器实例
+    config_manager = ConfigManager()
+    
+    # 获取OA Token
+    print("OA Token:", config_manager.oa_token)
+    print("BH Version:", config_manager.bh_ver)
+    
+    # 检查程序更新
+    update_info = config_manager.check_program_update()
+    print("Update Info:", update_info)
