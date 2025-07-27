@@ -1,6 +1,10 @@
 import os
 import sys
 import subprocess
+import shutil
+import re
+import json
+from datetime import datetime
 from pathlib import Path
 
 # 定义黑名单文件
@@ -51,6 +55,82 @@ def check_blacklist_files(app_dir):
         print("✓ 未发现黑名单文件")
         return False
 
+def extract_version_from_filename(filename):
+    """从安装包文件名中提取版本号"""
+    # 匹配格式: BBH3ScanLaunch_Setup_v1.1.exe
+    match = re.search(r'BBH3ScanLaunch_Setup_v(\d+\.\d+)\.exe', filename)
+    if match:
+        return match.group(1)
+    return "1.0"  # 默认版本号
+
+def format_file_size(size_in_bytes):
+    """格式化文件大小为MB字符串"""
+    size_in_mb = size_in_bytes / (1024 * 1024)
+    return f"{round(size_in_mb)}MB"
+
+def generate_version_info(script_dir, setup_filename):
+    """生成版本信息JSON"""
+    # 提取版本号
+    version = extract_version_from_filename(setup_filename)
+    
+    # 当前日期
+    release_date = datetime.now().strftime("%Y-%m-%d")
+    
+    # 文件大小
+    setup_path = script_dir / "app" / setup_filename
+    if setup_path.exists():
+        size = format_file_size(setup_path.stat().st_size)
+    else:
+        size = "0MB"
+    
+    # 构建下载URL
+    download_url = f"https://cdn.jsdelivr.net/gh/LoveElysia1314/BBH3ScanLaunch@latest/app/{setup_filename}"
+    changelog_url = "https://cdn.jsdelivr.net/gh/LoveElysia1314/BBH3ScanLaunch@latest/updates/changelog.txt"
+    
+    # 创建版本信息字典
+    version_info = {
+        "version": version,
+        "release_date": release_date,
+        "download_url": download_url,
+        "changelog": changelog_url,
+        "size": size
+    }
+    
+    # 创建updates目录并写入文件
+    updates_dir = script_dir / "updates"
+    updates_dir.mkdir(exist_ok=True)
+    
+    version_file = updates_dir / "version.json"
+    with open(version_file, 'w', encoding='utf-8') as f:
+        json.dump(version_info, f, indent=4, ensure_ascii=False)
+    
+    print(f"✅ 已生成版本信息文件: {version_file}")
+    print(json.dumps(version_info, indent=4, ensure_ascii=False))
+
+def rename_output_to_app(script_dir):
+    """将Output文件夹重命名为app（覆盖已有文件夹）"""
+    output_dir = script_dir / "Output"
+    app_dir = script_dir / "app"
+    
+    if not output_dir.exists():
+        print("⚠ 警告：Output目录不存在，跳过重命名")
+        return None
+    
+    # 删除现有的app目录（如果存在）
+    if app_dir.exists():
+        shutil.rmtree(app_dir)
+        print("♻ 已删除现有的app目录")
+    
+    # 重命名Output为app
+    output_dir.rename(app_dir)
+    print(f"✅ 已将Output目录重命名为app")
+    
+    # 返回安装包文件名
+    setup_files = list(app_dir.glob("BBH3ScanLaunch_Setup_v*.exe"))
+    if setup_files:
+        return setup_files[0].name
+    return None
+
 def build_installer():
     """构建安装包"""
     script_dir = Path(__file__).parent.resolve()
@@ -96,17 +176,14 @@ def build_installer():
         
         print("✅ 安装包编译成功！")
         
-        # 查找生成的安装包
-        output_files = list(output_dir.glob("*.exe"))
-        if output_files:
-            print(f"📦 安装包位置: {output_files[0]}")
+        # 重命名Output为app并获取安装包文件名
+        setup_filename = rename_output_to_app(script_dir)
+        
+        if setup_filename:
+            # 生成版本信息文件
+            generate_version_info(script_dir, setup_filename)
         else:
-            # 也可能在当前目录生成
-            setup_files = list(script_dir.glob("BBH3ScanLaunch_Setup_v*.exe"))
-            if setup_files:
-                print(f"📦 安装包位置: {setup_files[0]}")
-            else:
-                print("⚠ 未找到生成的安装包文件")
+            print("⚠ 警告：未找到安装包文件，跳过生成版本信息")
             
         return True
         
@@ -123,16 +200,15 @@ def build_installer():
         print("⚠ 编码警告（不影响安装包生成）:", str(e))
         print("✅ 安装包编译成功！")
         
-        # 查找生成的安装包
-        output_files = list(output_dir.glob("*.exe"))
-        if output_files:
-            print(f"📦 安装包位置: {output_files[0]}")
+        # 重命名Output为app并获取安装包文件名
+        setup_filename = rename_output_to_app(script_dir)
+        
+        if setup_filename:
+            # 生成版本信息文件
+            generate_version_info(script_dir, setup_filename)
         else:
-            setup_files = list(script_dir.glob("BBH3ScanLaunch_Setup_v*.exe"))
-            if setup_files:
-                print(f"📦 安装包位置: {setup_files[0]}")
-            else:
-                print("⚠ 未找到生成的安装包文件")
+            print("⚠ 警告：未找到安装包文件，跳过生成版本信息")
+            
         return True
     except Exception as e:
         print(f"❌ 发生错误: {e}")
@@ -169,7 +245,8 @@ def main():
     
     if build_installer():
         print("\n🎉 恭喜！安装包构建完成！")
-        print("📦 安装包位于项目根目录或 Output 目录中")
+        print("📦 安装包位于 app 目录中")
+        print("📄 版本信息已保存到 updates/version.json")
         print("🛡️  安装时将要求管理员权限（UAC）")
         print("📋 安装后将自动创建以下快捷方式：")
         print("   - 开始菜单: [仅B服] 崩坏3扫码器")
