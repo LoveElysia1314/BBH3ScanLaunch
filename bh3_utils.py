@@ -173,7 +173,7 @@ class ImageProcessor:
                 print(f"[WARNING] 跳过文件（缺少有效分辨率标识）: {filename}")
                 continue
 
-            print(f"[DEBUG] 加载模板: {filename} (源分辨率: {src_resolution}p)")
+            #print(f"[DEBUG] 加载模板: {filename} (源分辨率: {src_resolution}p)")
             template = cv2.imread(file_path, cv2.IMREAD_GRAYSCALE)
             if template is None:
                 print(f"[WARNING] 无法加载模板: {filename}")
@@ -188,7 +188,7 @@ class ImageProcessor:
             # 缓存缩放后的模板
             self.template_cache[filename] = scaled_template
             loaded_count += 1
-            print(f"[DEBUG] 已缓存模板: {filename} ({new_size[0]}x{new_size[1]})")
+            #print(f"[DEBUG] 已缓存模板: {filename} ({new_size[0]}x{new_size[1]})")
 
         print(f"[INFO] 模板加载完成，共加载 {loaded_count} 个模板")
 
@@ -201,7 +201,7 @@ class ImageProcessor:
 
     def capture_screen(self):
         """捕获整个崩坏3游戏窗口的灰度图像"""
-        print("[DEBUG] 开始屏幕捕获")
+        #print("[DEBUG] 开始屏幕捕获")
         capturer = self._init_window_capturer()
         pil_img = capturer.capture_window()
         if pil_img is None:
@@ -298,8 +298,7 @@ class ImageProcessor:
                           if p.startswith('ticket=')), None)
                           
             if ticket and config and bh_info:
-                print("[INFO] 检测到有效登陆票据")
-                print("[INFO] 开始扫码验证")
+                print("[INFO] 检测到有效登陆票据，开始扫码验证")
                 await mihoyosdk.scanCheck(bh_info, ticket, config)
                 self.clear_clipboard()
                 print("[INFO] 扫码验证完成")
