@@ -4,15 +4,17 @@ import sys
 import asyncio
 import subprocess
 import webbrowser
+import json
+import os  # 需要导入 os
 from threading import Thread
 from flask import Flask, abort, render_template, request
 import logging
 from PySide6.QtCore import QThread, Signal, QTimer
 from PySide6.QtGui import QIcon
-from PySide6.QtWidgets import QApplication, QMainWindow, QFileDialog, QMessageBox
+from PySide6.QtWidgets import QApplication, QMainWindow, QFileDialog, QMessageBox, QTextEdit, QWidget, QVBoxLayout # 添加 QTextEdit, QWidget, QVBoxLayout
 import bsgamesdk
 import mihoyosdk
-import mainWindow
+import mainWindow  # 假设这是包含更新后 Ui_MainWindow 的文件
 from bh3_utils import image_processor, is_game_window_exist, click_center_of_game_window
 from utils import EmittingStream
 from config_utils import ConfigManager
@@ -82,14 +84,16 @@ class LoginThread(QThread):
                 self.login_complete.emit(False)
                 return
             print("[INFO] 获取OA服务器成功！")
-            ui.loginBiliBtn.setText("账号已登陆")
+            # UI更新移动到信号连接的槽函数中
+            # ui.loginBiliBtn.setText("账号已登陆")
             config['account_login'] = True
             config_manager.write_conf(config)
             self.login_complete.emit(True)
         except Exception as e:
             print(f"[ERROR] 登陆过程中发生错误: {str(e)}")
-            ui.loginBiliBtn.setText("登陆失败")
-            ui.loginBiliBtn.setDisabled(False)
+            # UI更新移动到信号连接的槽函数中
+            # ui.loginBiliBtn.setText("登陆失败")
+            # ui.loginBiliBtn.setDisabled(False)
             self.login_complete.emit(False) # 异常时也发出信号
 
     def handle_login_failure(self, bs_info):
@@ -105,8 +109,9 @@ class LoginThread(QThread):
             webbrowser.open_new(bs_info['cap_url'])
         else:
             print(f"[INFO] 登陆失败！{bs_info}")
-        ui.loginBiliBtn.setText("登陆账号")
-        ui.loginBiliBtn.setDisabled(False)
+        # UI更新移动到信号连接的槽函数中
+        # ui.loginBiliBtn.setText("登陆账号")
+        # ui.loginBiliBtn.setDisabled(False)
         # 注意：这里不再 emit False，因为 login() 函数中已经 emit 了
 
     def run(self):
@@ -193,7 +198,6 @@ def start_parse_thread_after_login(success):
     if hasattr(ui, 'backendClipCheck') and ui.backendClipCheck.isRunning():
         print("[WARNING] 解析线程已在运行中？")
         return
-
     # 创建并启动解析线程
     ui.backendClipCheck = ParseThread()
     ui.backendClipCheck.update_log.connect(print)
@@ -302,23 +306,136 @@ class SelfMainWindow(QMainWindow):
             self.update_status_text(checkbox, prefix)
         print("[INFO] 一键登陆模式已结束，恢复原始设置")
 
+    # --- 新增方法以适配更新后的UI ---
+    def show_documentation(self, doc_type):
+        """显示说明文档或更新日志"""
+        if doc_type == "instructions":
+            # 使用信息框显示 UI 中定义的帮助文本
+            # 注意：get_help_text 现在返回纯文本
+            instructions = ui.get_help_text()
+            QMessageBox.information(self, "使用说明", instructions, QMessageBox.StandardButton.Ok)
+
+        elif doc_type == "changelog":
+            # 示例：假设你有一个 CHANGELOG.txt 文件
+            changelog_path = "CHANGELOG.txt" # 或 "changelog.html"
+            if os.path.exists(changelog_path):
+                try:
+                    with open(changelog_path, 'r', encoding='utf-8') as f: # 注意编码
+                        changelog_text = f.read()
+                    # 用一个单独的窗口显示
+                    self.show_text_window("更新日志", changelog_text)
+
+                except Exception as e:
+                    print(f"[WARNING] 读取更新日志失败: {e}")
+                    # QMessageBox.warning(self, "错误", f"无法读取更新日志: {e}")
+            else:
+                 # 如果没有本地文件，可以打开网页链接 (需要替换为实际链接)
+                 # webbrowser.open("https://your-changelog-url.com")
+                 print(f"[WARNING] 未找到更新日志文件 CHANGELOG.txt")
+
+    def show_text_window(self, title, text):
+        """显示一个包含文本的新窗口"""
+        text_window = QWidget()
+        text_window.setWindowTitle(title)
+        layout = QVBoxLayout(text_window)
+        text_edit = QTextEdit()
+        text_edit.setReadOnly(True)
+        text_edit.setPlainText(text) # 如果是纯文本
+        # text_edit.setHtml(text) # 如果是 HTML
+        layout.addWidget(text_edit)
+        text_window.resize(600, 400) # 设置合适大小
+        text_window.show()
+
+    def check_for_updates(self):
+        """检查更新"""
+        # 这里实现你的更新检查逻辑
+        # 例如：访问一个API获取最新版本号，与当前版本比较
+        current_version = "v1.1" # 从UI或配置中获取
+        ui.updateStatusLabel.setText("正在检查更新...")
+        # 模拟网络请求 (你需要替换为真实的请求)
+        # import requests
+        # try:
+        #     response = requests.get("https://your-update-api.com/version")
+        #     latest_version = response.json().get("version", "")
+        # except Exception as e:
+        #     print(f"检查更新失败: {e}")
+        #     ui.updateStatusLabel.setText("检查更新失败")
+        #     return
+
+        # --- 模拟检查结果 ---
+        # import random
+        # is_newer_version = random.choice([True, False]) # 随机模拟是否有更新
+        # latest_version = "v1.2" if is_newer_version else current_version
+
+        # --- 简单的本地版本比较模拟 ---
+        # 假设你有一个 config.json 或其他地方存储了检查到的最新版本
+        # latest_version_info_path = "latest_version_info.json"
+        # latest_version = current_version
+        # if os.path.exists(latest_version_info_path):
+        #     try:
+        #         with open(latest_version_info_path, 'r') as f:
+        #             data = json.load(f)
+        #             latest_version = data.get("latest_version", current_version)
+        #     except:
+        #         pass
+
+        # is_newer_version = latest_version > current_version # 简单字符串比较，适用于 v1.1, v1.2 格式
+
+        # --- 硬编码模拟结果 ---
+        # 为了演示，我们假设总是检查到最新版或总是有更新
+        # is_newer_version = False # 改为 True 测试有更新的情况
+        # latest_version = "v1.1" if not is_newer_version else "v1.2"
+
+        # --- 实际应用中，你应该有真实的检查逻辑 ---
+        # 例如，比较 current_version 和从服务器获取的 latest_version
+        # is_newer_version = self.is_version_newer(current_version, latest_version)
+
+        # --- 这里我们暂时只显示当前版本 ---
+        is_newer_version = False
+        latest_version = current_version
+
+        if is_newer_version:
+            ui.updateStatusLabel.setText(f"发现新版本: {latest_version}")
+            # 可以弹出提示框询问是否下载
+            # from PySide6.QtWidgets import QMessageBox
+            # reply = QMessageBox.question(self, '更新', f'发现新版本 {latest_version}，是否前往下载？',
+            #                              QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+            # if reply == QMessageBox.StandardButton.Yes:
+            #     webbrowser.open("https://your-download-url.com") # 替换为实际下载链接
+        else:
+             # 如果是启动时检查，可能不显示 "已是最新版本" 以减少干扰
+             # 可以通过传递一个标志位来区分，这里简化处理
+             ui.updateStatusLabel.setText("当前版本: v1.1") # 或 "已是最新版本"
+
+        print(f"[WARNING] 检查更新完成。当前版本: {current_version}, 最新版本: {latest_version}")
+
+    # def is_version_newer(self, current, latest):
+    #     # 实现版本号比较逻辑，例如 "v1.2" > "v1.1"
+    #     # 这可能需要使用 packaging.version 或自定义解析
+    #     # from packaging import version
+    #     # return version.parse(latest) > version.parse(current)
+    #     pass # 简化示例
+
+
 # ========== Flask 启动 ==========
 if __name__ == '__main__':
     stream = EmittingStream()
     config = config_manager.config
     stream.show_debug_gui = config['debug_print'] # 调整信息输出级别
     sys.stdout = stream
+
     app = QApplication(sys.argv)
     window = SelfMainWindow()
-    ui = mainWindow.Ui_MainWindow()
-    ui.setupUi(window)
+    ui = mainWindow.Ui_MainWindow() # 实例化 UI
+    ui.setupUi(window) # 设置 UI 到窗口
+    # 连接信号流到print
     stream.textWritten.connect(lambda text: ui.logText.append(text))
-    fapp = Flask(__name__)
 
+    # Flask 应用设置
+    fapp = Flask(__name__)
     # 禁用 Werkzeug 的日志
     log = logging.getLogger('werkzeug')
     log.setLevel(logging.ERROR)
-
     # 禁用 Flask 的启动信息
     cli = sys.modules['flask.cli']
     cli.show_server_banner = lambda *x: None
@@ -348,10 +465,14 @@ if __name__ == '__main__':
     )
     flaskThread.start()
 
+    # --- 在显示窗口前应用配置 ---
+    # 尝试自动登录
     if config['account']:
         print("[INFO] 配置文件已有账号，尝试登陆中...")
+        # 注意：此时UI控件已创建，可以安全调用
         login_accept()
 
+    # 应用配置到UI控件 (移到 setupUi 之后)
     for checkbox, feature, prefix in [
         (ui.clipCheck, 'clip_check', "当前状态"),
         (ui.autoCloseCheck, 'auto_close', "当前状态"),
@@ -359,13 +480,17 @@ if __name__ == '__main__':
         (ui.autoClick, 'auto_click', "当前状态"),
         (ui.debugPrint, 'debug_print', "当前状态")
     ]:
+        # 使用 config.get 并提供默认值 False，确保不会因键缺失出错
         checkbox.setChecked(config.get(feature, False))
         window.update_status_text(checkbox, prefix)
 
+    # 更新游戏路径按钮文本
     ui.configGamePathBtn.setText("路径已配置" if config.get('game_path') else "点击配置")
 
+    # 显示窗口
     window.show()
 
+    # 处理命令行参数
     if '--auto-login' in sys.argv:
         QTimer.singleShot(100, window.oneClickLogin)
         print("[INFO] 检测到自动登陆参数，将启动一键登陆模式")
