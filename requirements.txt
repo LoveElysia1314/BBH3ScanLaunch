@@ -1,3 +1,4 @@
+pyinstaller
 flask
 PySide6
 opencv-python-headless

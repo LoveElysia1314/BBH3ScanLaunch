@@ -1,13 +1,20 @@
 import base64
-
-from Crypto.Cipher import PKCS1_v1_5 as Cipher_pkcs1_v1_5
-from Crypto.PublicKey import RSA
-
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric import padding
+from cryptography.hazmat.primitives import hashes
 
 def rsacreate(message, public_key):
     """使用RSA公钥加密消息（PKCS#1 v1.5填充）"""
-    rsakey = RSA.importKey(public_key)
-    cipher = Cipher_pkcs1_v1_5.new(rsakey)  # 创建用于执行pkcs1_v1_5加密或解密的密码
-    cipher_text = base64.b64encode(cipher.encrypt(message.encode('utf-8')))
-    text = cipher_text.decode('utf-8')
-    return text
+    # 加载公钥
+    pub_key = serialization.load_pem_public_key(
+        public_key.encode('utf-8')
+    )
+    
+    # 使用PKCS1v15填充加密
+    cipher_text = pub_key.encrypt(
+        message.encode('utf-8'),
+        padding.PKCS1v15()
+    )
+    
+    # 返回Base64编码的加密结果
+    return base64.b64encode(cipher_text).decode('utf-8')
