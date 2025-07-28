@@ -137,7 +137,7 @@ class NetworkManager:
 
     def get_oa_token(self):
         """获取OA token和游戏版本"""
-        original_url = "https://cdn.jsdelivr.net/gh/LoveElysia1314/BBH3ScanLaunch@latest/oa_token.json"
+        original_url = "https://cdn.jsdelivr.net/gh/LoveElysia1314/BBH3ScanLaunch@main/oa_token.json"
         result = self.fetch_from_multiple_sources(original_url)
         if result and result['success']:
             try:
@@ -158,7 +158,7 @@ class NetworkManager:
         """检查程序是否有新版本，并下载更新日志"""
         try:
             # 1. 获取远程版本信息
-            version_url = "https://cdn.jsdelivr.net/gh/LoveElysia1314/BBH3ScanLaunch@latest/updates/version.json"
+            version_url = "https://cdn.jsdelivr.net/gh/LoveElysia1314/BBH3ScanLaunch@main/updates/version.json"
             version_result = self.fetch_from_multiple_sources(version_url, timeout=10)
             
             if not (version_result and version_result['success']):
