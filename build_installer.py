@@ -2,6 +2,7 @@ import os
 import sys
 import subprocess
 import shutil
+import re
 import json
 from datetime import datetime
 from pathlib import Path
@@ -15,7 +16,7 @@ BLACKLIST_FILES = [
 ]
 
 def generate_iss_file(script_dir, version):
-    """动态生成 setup.iss 文件"""
+    """动态生成 setup.iss 文件（添加64位支持和卸载选项）"""
     iss_content = f"""; BBH3ScanLaunch 安装包脚本 (动态生成)
 #define MyAppName "BBH3ScanLaunch"
 #define MyAppVersion "{version}"
@@ -35,18 +36,20 @@ AppPublisher=BBH3ScanLaunch
 AppPublisherURL=https://github.com/your-repo
 AppSupportURL=https://github.com/your-repo
 AppUpdatesURL=https://github.com/your-repo
+; 添加64位支持
+ArchitecturesInstallIn64BitMode=x64
+ArchitecturesAllowed=x64
 
 [Files]
 Source: "dist\BBH3ScanLaunch\*"; Excludes: "config.json"; DestDir: "{{app}}\BBH3ScanLaunch"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
 ; 开始菜单快捷方式（带UAC）
-Name: "{{group}}\[仅B服] 崩坏3扫码器"; Filename: "{{app}}\BBH3ScanLaunch\{{#MyAppExeName}}"; IconFilename: "{{app}}\BBH3ScanLaunch\BHimage.ico"
-Name: "{{group}}\[仅B服] 一键登陆崩坏3"; Filename: "{{app}}\BBH3ScanLaunch\{{#MyAppExeName}}"; Parameters: "--auto-login"; IconFilename: "{{app}}\BBH3ScanLaunch\BHimage.ico"
-
+Name: "{{group}}\BBH3ScanLaunch"; Filename: "{{app}}\BBH3ScanLaunch\{{#MyAppExeName}}"; IconFilename: "{{app}}\BBH3ScanLaunch\BHimage.ico"
+Name: "{{group}}\AutoLoginBBH3"; Filename: "{{app}}\BBH3ScanLaunch\{{#MyAppExeName}}"; Parameters: "--auto-login"; IconFilename: "{{app}}\BBH3ScanLaunch\BHimage.ico"
 ; 桌面快捷方式（带UAC） - 直接创建不询问
-Name: "{{autodesktop}}\[仅B服] 崩坏3扫码器"; Filename: "{{app}}\BBH3ScanLaunch\{{#MyAppExeName}}"; IconFilename: "{{app}}\BBH3ScanLaunch\BHimage.ico"
-Name: "{{autodesktop}}\[仅B服] 一键登陆崩坏3"; Filename: "{{app}}\BBH3ScanLaunch\{{#MyAppExeName}}"; Parameters: "--auto-login"; IconFilename: "{{app}}\BBH3ScanLaunch\BHimage.ico"
+Name: "{{autodesktop}}\BBH3ScanLaunch"; Filename: "{{app}}\BBH3ScanLaunch\{{#MyAppExeName}}"; IconFilename: "{{app}}\BBH3ScanLaunch\BHimage.ico"
+Name: "{{autodesktop}}\AutoLoginBBH3"; Filename: "{{app}}\BBH3ScanLaunch\{{#MyAppExeName}}"; Parameters: "--auto-login"; IconFilename: "{{app}}\BBH3ScanLaunch\BHimage.ico"
 
 [Run]
 Filename: "{{app}}\BBH3ScanLaunch\{{#MyAppExeName}}"; Description: "{{cm:LaunchProgram,{{#MyAppName}}}}"; Flags: nowait postinstall skipifsilent runascurrentuser
@@ -55,6 +58,41 @@ Filename: "{{app}}\BBH3ScanLaunch\{{#MyAppExeName}}"; Description: "{{cm:LaunchP
 ; 为EXE添加UAC清单（如果程序本身没有）
 Root: HKLM; Subkey: "SOFTWARE\Microsoft\Windows NT\CurrentVersion\AppCompatFlags\Layers"; \
     ValueType: String; ValueName: "{{app}}\BBH3ScanLaunch\{{#MyAppExeName}}"; ValueData: "RUNASADMIN"; Flags: uninsdeletevalue
+
+[Code]
+// 自定义卸载过程 - 询问是否删除用户配置
+procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
+var
+  appDataPath: string;
+  userDataPath: string;
+  choice: Integer;
+begin
+  case CurUninstallStep of
+    usPostUninstall:
+      begin
+        // 获取用户数据目录
+        appDataPath := ExpandConstant('{{localappdata}}');
+        userDataPath := appDataPath + '\\BBH3ScanLaunch';
+        
+        // 检查用户数据目录是否存在
+        if DirExists(userDataPath) then
+        begin
+          // 询问用户是否删除配置
+          choice := MsgBox('是否删除用户配置数据？' #13#13 '路径: ' + userDataPath, 
+            mbConfirmation, MB_YESNO or MB_DEFBUTTON2);
+            
+          if choice = IDYES then
+          begin
+            // 删除用户数据目录
+            if DelTree(userDataPath, True, True, True) then
+              MsgBox('用户配置数据已成功删除。', mbInformation, MB_OK)
+            else
+              MsgBox('无法完全删除用户配置数据，部分文件可能被占用。', mbError, MB_OK);
+          end;
+        end;
+      end;
+  end;
+end;
 """
 
     iss_file = script_dir / "setup.iss"
@@ -126,8 +164,8 @@ def generate_version_info(script_dir, setup_filename):
         size = "0MB"
     
     # 构建下载URL
-    download_url = f"https://cdn.jsdelivr.net/gh/LoveElysia1314/BBH3ScanLaunch@latest/app/{setup_filename}"
-    changelog_url = "https://cdn.jsdelivr.net/gh/LoveElysia1314/BBH3ScanLaunch@latest/updates/changelog.txt"
+    download_url = f"https://cdn.jsdelivr.net/gh/LoveElysia1314/BBH3ScanLaunch@main/app/{setup_filename}"
+    changelog_url = "https://cdn.jsdelivr.net/gh/LoveElysia1314/BBH3ScanLaunch@main/updates/changelog.txt"
     
     # 创建版本信息字典
     version_info = {
@@ -149,28 +187,43 @@ def generate_version_info(script_dir, setup_filename):
     print(f"✅ 已生成版本信息文件: {version_file}")
     print(json.dumps(version_info, indent=4, ensure_ascii=False))
 
-def rename_output_to_app(script_dir):
-    """将Output文件夹重命名为app（覆盖已有文件夹）"""
+def move_output_to_app(script_dir):
+    """将Output文件夹中的文件移动到app文件夹，然后删除Output文件夹"""
     output_dir = script_dir / "Output"
     app_dir = script_dir / "app"
     
     if not output_dir.exists():
-        print("⚠ 警告：Output目录不存在，跳过重命名")
+        print("⚠ 警告：Output目录不存在，跳过移动")
         return None
     
-    # 删除现有的app目录（如果存在）
-    if app_dir.exists():
-        shutil.rmtree(app_dir)
-        print("♻ 已删除现有的app目录")
+    # 确保app目录存在
+    app_dir.mkdir(exist_ok=True)
     
-    # 重命名Output为app
-    output_dir.rename(app_dir)
-    print(f"✅ 已将Output目录重命名为app")
+    # 移动所有文件到app目录
+    setup_files = []
+    for item in output_dir.iterdir():
+        if item.is_file():
+            dest = app_dir / item.name
+            # 如果目标文件已存在，先删除
+            if dest.exists():
+                dest.unlink()
+            shutil.move(str(item), str(dest))
+            setup_files.append(dest)
+            print(f"📦 移动文件: {item.name} → app/")
+    
+    # 删除Output目录
+    try:
+        shutil.rmtree(output_dir)
+        print("♻ 已删除Output目录")
+    except Exception as e:
+        print(f"⚠ 警告：无法删除Output目录: {e}")
     
     # 返回安装包文件名
-    setup_files = list(app_dir.glob("BBH3ScanLaunch_Setup_v*.exe"))
     if setup_files:
-        return setup_files[0].name
+        # 查找主要的安装包文件
+        for file in setup_files:
+            if file.name.startswith("BBH3ScanLaunch_Setup_v"):
+                return file.name
     return None
 
 def find_inno_compiler():
@@ -224,7 +277,7 @@ def build_installer():
     # 动态生成 ISS 文件
     iss_file = generate_iss_file(script_dir, version)
     
-    print(f"\n🚀 正在编译安装包...")
+    print(f"\n🚀 正在编译64位安装包...")
     try:
         # 确保输出目录存在
         output_dir = script_dir / "Output"
@@ -236,7 +289,7 @@ def build_installer():
             str(iss_file)
         ], check=True, capture_output=True, text=True, cwd=script_dir, encoding='utf-8')
         
-        print("✅ 安装包编译成功！")
+        print("✅ 64位安装包编译成功！")
         
         # 编译完成后删除临时 ISS 文件
         try:
@@ -245,8 +298,8 @@ def build_installer():
         except Exception as e:
             print(f"⚠ 警告：无法删除临时 setup.iss 文件: {e}")
         
-        # 重命名Output为app并获取安装包文件名
-        setup_filename = rename_output_to_app(script_dir)
+        # 将Output中的文件移动到app目录
+        setup_filename = move_output_to_app(script_dir)
         
         if setup_filename:
             # 生成版本信息文件
@@ -267,8 +320,8 @@ def build_installer():
         print("⚠ 编码警告（不影响安装包生成）:", str(e))
         print("✅ 安装包编译成功！")
         
-        # 重命名Output为app并获取安装包文件名
-        setup_filename = rename_output_to_app(script_dir)
+        # 将Output中的文件移动到app目录
+        setup_filename = move_output_to_app(script_dir)
         
         if setup_filename:
             # 生成版本信息文件
@@ -286,17 +339,19 @@ def main():
     print("🚀 开始构建 BBH3ScanLaunch 安装包...")
     print("=" * 50)
     print("💡 注意：此安装包需要管理员权限（UAC）")
+    print("💡 目标平台：64位 Windows")
     
     if build_installer():
-        print("\n🎉 恭喜！安装包构建完成！")
+        print("\n🎉 恭喜！64位安装包构建完成！")
         print("📦 安装包位于 app 目录中")
         print("📄 版本信息已保存到 updates/version.json")
         print("🛡️  安装时将要求管理员权限（UAC）")
         print("📋 安装后将自动创建以下快捷方式：")
-        print("   - 开始菜单: [仅B服] 崩坏3扫码器")
-        print("   - 开始菜单: [仅B服] 一键登陆崩坏3 (带--auto-login参数)")
-        print("   - 桌面: [仅B服] 崩坏3扫码器")
-        print("   - 桌面: [仅B服] 一键登陆崩坏3 (带--auto-login参数)")
+        print("   - 开始菜单: BBH3ScanLaunch")
+        print("   - 开始菜单: AutoLoginBBH3 (带--auto-login参数)")
+        print("   - 桌面: BBH3ScanLaunch")
+        print("   - 桌面: AutoLoginBBH3 (带--auto-login参数)")
+        print("🗑️  卸载时将询问是否删除用户配置数据")
     else:
         print("\n❌ 安装包构建失败！")
         sys.exit(1)

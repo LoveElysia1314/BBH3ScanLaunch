@@ -253,3 +253,5 @@ class Ui_MainWindow:
         
         # 连接关于组按钮信号
         self.checkUpdateBtn.clicked.connect(MainWindow.check_for_updates)
+
+ui = Ui_MainWindow()  # 实例化 UI

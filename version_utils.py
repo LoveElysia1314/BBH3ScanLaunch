@@ -7,7 +7,7 @@ import datetime
 class VersionManager:
     VERSION_CONFIG_PATH = './updates/version.json'
     CHANGE_LOG_PATH = './updates/changelog.txt'
-    CURRENT_VERSION = "1.2.1"  # 硬编码当前版本
+    CURRENT_VERSION = "1.2.2"  # 硬编码当前版本
 
     def __init__(self):
         self.update_version_file()
@@ -94,4 +94,4 @@ class VersionManager:
 # 全局实例
 version_manager = VersionManager()
 
-print(version_manager.read_changelog())
+# print(version_manager.read_changelog())

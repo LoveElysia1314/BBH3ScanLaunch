@@ -31,20 +31,36 @@ def main():
     venv_dir = script_dir / "venv"
     activate_script = venv_dir / ("Scripts" if sys.platform == "win32" else "bin") / "activate"
     
+    # 检查并创建虚拟环境（如果不存在）
     if not activate_script.exists():
-        sys.exit(f"错误：未找到虚拟环境！\n请确保在脚本目录下创建了venv环境: {venv_dir}")
+        print(f"未找到虚拟环境，正在创建: {venv_dir}")
+        subprocess.run([sys.executable, "-m", "venv", str(venv_dir)], check=True)
+        
+        # 设置虚拟环境路径
+        if sys.platform == "win32":
+            venv_bin = venv_dir / "Scripts"
+            os.environ["PATH"] = f"{venv_bin};{os.environ['PATH']}"
+        else:
+            venv_bin = venv_dir / "bin"
+            os.environ["PATH"] = f"{venv_bin}:{os.environ['PATH']}"
     
     # 配置环境
     if sys.platform == "win32":
         os.environ["PATH"] = f"{venv_dir / 'Scripts'};{os.environ['PATH']}"
     clean_environment(venv_dir)
     
+    # 安装/更新依赖
+    print("\n===== 安装/更新依赖 =====")
+    pip_cmd = [
+        sys.executable, "-m", "pip", "install",
+        "--upgrade", "pip",
+        "-r", str(script_dir / "requirements.txt")
+    ]
+    subprocess.run(pip_cmd, check=True)
+    
     # 清理缓存
     for cache_dir in ["__pycache__", "build", "dist"]:
         shutil.rmtree(cache_dir, ignore_errors=True)
-    
-    # 安装依赖
-    install_dependencies(script_dir)
     
     # 构建路径
     output_dir = script_dir / "dist"

@@ -15,7 +15,6 @@ import mihoyosdk
 
 # 常量定义
 TEMPLATE_DIR = "Pictures_to_Match"  # 模板图片目录
-SCREENSHOT_DELAY = 0.2  # 截图延迟时间
 GAME_WINDOW_TITLE = "崩坏3"  # 游戏窗口标题
 
 def is_game_window_exist():

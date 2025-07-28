@@ -1,10 +1,10 @@
 # 标准库 imports
+import asyncio
 import hashlib
 import hmac
 import json
+import requests
 import time
-# 自定义库 imports
-from network_utils import sendGet, sendPost, sendGetRaw
 
 url = 'https://api-sdk.mihoyo.com/bh3_cn/combo/granter/login/v2/login'
 verifyBody = '{"device":"0000000000000000","app_id":"1","channel_id":"14","data":{},"sign":""}'
@@ -150,3 +150,44 @@ async def verify(uid, access_key):
     # print("[DEBUG]", json.dumps(body, sep=" "))
     feedback = await sendPost(url, json.dumps(body).replace(' ', ''))
     return feedback
+
+async def sendPost(target, data, noReturn=False):
+    try:
+        session = requests.Session()
+        session.trust_env = False
+        res = session.post(url=target, data=data)
+        if noReturn:
+            return
+        if res is None:
+            print("[INFO] 请求错误，正在重试...")
+            return await sendPost(target, data, noReturn)
+        return res.json()
+    except Exception as e:
+        print(f"[ERROR] POST 请求失败: {e}")
+        return None
+
+async def sendGet(target, default_ret=None):
+    try:
+        session = requests.Session()
+        session.trust_env = False
+        res = session.get(url=target)
+        if res is None:
+            print("[INFO] 请求错误，正在重试...")
+            return await sendGet(target, default_ret)
+        return res.json()
+    except Exception as e:
+        print(f"[ERROR] GET 请求失败: {e}")
+        return default_ret
+
+async def sendGetRaw(target, default_ret=None):
+    try:
+        session = requests.Session()
+        session.trust_env = False
+        res = session.get(url=target)
+        if res is None:
+            print("[INFO] 请求错误，正在重试...")
+            return await sendGetRaw(target, default_ret)
+        return res.text
+    except Exception as e:
+        print(f"[ERROR] GET 原始请求失败: {e}")
+        return default_ret
