@@ -2,7 +2,7 @@
 from PySide6 import QtCore, QtWidgets
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (QDialog, QDialogButtonBox, QLabel, QLineEdit,
-                               QVBoxLayout, QHBoxLayout, QTextBrowser)
+                               QVBoxLayout, QHBoxLayout, QTextBrowser, QTextEdit, QWidget, QPushButton, QTabWidget)
 
 from version_utils import version_manager
 
@@ -78,6 +78,9 @@ class Ui_MainWindow:
         self.create_features_group(right_layout)
         self.create_auto_login_group(right_layout)
         
+        # 添加关于组（移动到自动化组下方）
+        self.create_about_group(right_layout)
+        
         # 添加到主布局
         self.mainLayout.addWidget(self.rightContainer)
         MainWindow.setCentralWidget(self.centralwidget)
@@ -91,20 +94,41 @@ class Ui_MainWindow:
         QtCore.QMetaObject.connectSlotsByName(MainWindow)
 
     def create_left_area(self):
-        """创建包含日志的左侧面板"""
+        """创建包含信息展示的左侧面板（使用分页控件）"""
         self.leftContainer = QtWidgets.QWidget()
         left_layout = QtWidgets.QVBoxLayout(self.leftContainer)
         
-        # 日志区域
-        self.logGroup = QtWidgets.QGroupBox("运行日志")
-        logLayout = QtWidgets.QVBoxLayout(self.logGroup)
+        # 信息展示区域（使用分页控件）
+        self.infoTabWidget = QTabWidget()
+        self.infoTabWidget.setTabPosition(QTabWidget.TabPosition.North)
+        
+        # 第一页：运行日志
+        self.logTab = QWidget()
+        logLayout = QtWidgets.QVBoxLayout(self.logTab)
         self.logText = QTextBrowser()
         self.logText.setOpenExternalLinks(True)
         logLayout.addWidget(self.logText)
-        left_layout.addWidget(self.logGroup)
+        self.infoTabWidget.addTab(self.logTab, "运行日志")
         
-        # 关于区域
-        self.create_about_group(left_layout)
+        # 第二页：程序说明
+        self.helpTab = QWidget()
+        helpLayout = QtWidgets.QVBoxLayout(self.helpTab)
+        self.helpText = QTextBrowser()
+        self.helpText.setOpenExternalLinks(True)
+        self.helpText.setHtml(self.get_help_text())
+        helpLayout.addWidget(self.helpText)
+        self.infoTabWidget.addTab(self.helpTab, "程序说明")
+        
+        # 第三页：更新日志
+        self.changelogTab = QWidget()
+        changelogLayout = QtWidgets.QVBoxLayout(self.changelogTab)
+        self.changelogText = QTextBrowser()
+        self.changelogText.setOpenExternalLinks(True)
+        self.changelogText.setPlainText(version_manager.read_changelog())
+        changelogLayout.addWidget(self.changelogText)
+        self.infoTabWidget.addTab(self.changelogTab, "更新日志")
+        
+        left_layout.addWidget(self.infoTabWidget)
         
         # 添加到主布局
         self.mainLayout.addWidget(self.leftContainer)
@@ -138,8 +162,8 @@ class Ui_MainWindow:
         # 复选框配置
         checkboxes = [
             ("解析二维码:", "clipCheck"),
-            ("自动截屏:", "autoClipCheck"),
-            ("自动退出:", "autoCloseCheck"),
+            ("自动截屏:", "autoClip"),
+            ("自动退出:", "autoClose"),
             ("自动点击:", "autoClick"),
             ("DEBUG:", "debugPrint")
         ]
@@ -171,26 +195,18 @@ class Ui_MainWindow:
         layout.addWidget(self.autoLoginGroup)
 
     def create_about_group(self, layout):
-        """创建包含说明和更新功能的'关于'组"""
+        """创建包含检查更新功能的'关于'组（简化版）"""
         self.aboutGroup = QtWidgets.QGroupBox("关于")
         gridLayout = QtWidgets.QGridLayout(self.aboutGroup)
         
-        # 按钮配置
-        buttons = [
-            ("查看说明", "viewInstructionsBtn"),
-            ("查看日志", "viewChangelogBtn"),
-            ("检查更新", "checkUpdateBtn")
-        ]
-        
-        for col, (btn_text, attr_name) in enumerate(buttons):
-            btn = QtWidgets.QPushButton(btn_text)
-            setattr(self, attr_name, btn)
-            gridLayout.addWidget(btn, 0, col)
+        # 只保留"检查更新"按钮
+        self.checkUpdateBtn = QtWidgets.QPushButton("检查更新")
+        gridLayout.addWidget(self.checkUpdateBtn, 0, 0)
         
         # 更新状态标签
         self.updateStatusLabel = QtWidgets.QLabel(f"当前版本：{version_manager.get_current_version()}")
         self.updateStatusLabel.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        gridLayout.addWidget(self.updateStatusLabel, 0, 3)
+        gridLayout.addWidget(self.updateStatusLabel, 0, 1, 1, 2)  # 跨两列显示
         
         layout.addWidget(self.aboutGroup)
 
@@ -219,14 +235,14 @@ class Ui_MainWindow:
         self.clipCheck.clicked.connect(
             lambda checked: MainWindow.toggle_feature('clip_check', self.clipCheck, "当前状态")
         )
-        self.autoClipCheck.clicked.connect(
-            lambda checked: MainWindow.toggle_feature('auto_clip', self.autoClipCheck, "当前状态")
+        self.autoClip.clicked.connect(
+            lambda checked: MainWindow.toggle_feature('auto_clip', self.autoClip, "当前状态")
         )
-        self.autoCloseCheck.clicked.connect(
-            lambda checked: MainWindow.toggle_feature('auto_close', self.autoCloseCheck, "当前状态")
+        self.autoClose.clicked.connect(
+            lambda checked: MainWindow.toggle_feature('auto_close', self.autoClose, "当前状态")
         )
         self.autoClick.clicked.connect(
-            lambda checked: MainWindow.toggle_feature('auto_switch_mode', self.autoClick, "当前状态")
+            lambda checked: MainWindow.toggle_feature('auto_click', self.autoClick, "当前状态")
         )
         self.debugPrint.clicked.connect(
             lambda checked: MainWindow.toggle_feature('debug_print', self.debugPrint, "当前状态")
@@ -237,7 +253,3 @@ class Ui_MainWindow:
         
         # 连接关于组按钮信号
         self.checkUpdateBtn.clicked.connect(MainWindow.check_for_updates)
-        self.viewInstructionsBtn.clicked.connect(
-            lambda: MainWindow.show_documentation("instructions"))
-        self.viewChangelogBtn.clicked.connect(
-            lambda: MainWindow.show_documentation("changelog"))

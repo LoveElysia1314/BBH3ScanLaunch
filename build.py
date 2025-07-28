@@ -14,6 +14,11 @@ try:
 except ImportError:
     WIN_SHORTCUT_AVAILABLE = False
 
+from version_utils import version_manager
+version = version_manager.CURRENT_VERSION
+
+import build_installer
+
 # 开关配置
 USE_ONEFILE = False  # True=单文件，False=多文件
 
@@ -67,7 +72,9 @@ def main():
     
     # 创建压缩包
     create_clean_package(output_dir)
-    
+    # 创建安装文件
+    build_installer.main()
+
     print("\n============= 构建成功 =============")
     print(f"程序目录: {app_dir}")
     print(f"资源目录: {app_dir / 'Pictures_to_Match'} 和 {app_dir / 'templates'}")
@@ -143,8 +150,9 @@ def copy_resources(script_dir, app_dir):
     resources = [
         ("templates", "目录"),
         ("Pictures_to_Match", "目录"),
+        ("updates", "目录"),
         ("BHimage.ico", "文件"),
-        ("oa_token.json", "文件")
+        ("oa_token.json", "文件"),
     ]
     
     for src_path, res_type in resources:
@@ -172,8 +180,8 @@ def create_windows_shortcuts(app_dir, exe_name):
     target_exe = app_dir / exe_name
     icon_file = app_dir / "BHimage.ico"
     shortcuts = [
-        ("[仅B服] 崩坏3扫码器.lnk", ""),
-        ("[仅B服] 一键登陆崩坏3.lnk", "--auto-login")
+        ("BBH3ScanLaunch.lnk", ""),
+        ("AutoLoginBBH3.lnk", "--auto-login")
     ]
 
     shell = Dispatch('WScript.Shell')
@@ -190,7 +198,7 @@ def create_windows_shortcuts(app_dir, exe_name):
 
 def create_clean_package(output_dir):
     """创建压缩包"""
-    zip_file = output_dir.parent / "BBH3ScanLaunch v1.1.zip"
+    zip_file = output_dir.parent / f"BBH3ScanLaunch v{version}.zip"
     zip_file.unlink(missing_ok=True)
     
     print(f"正在创建压缩包: {zip_file}")

@@ -6,11 +6,63 @@ import re
 import json
 from datetime import datetime
 from pathlib import Path
+from version_utils import version_manager
+
+version = version_manager.CURRENT_VERSION
 
 # 定义黑名单文件
 BLACKLIST_FILES = [
     "config.json"
 ]
+
+def generate_iss_file(script_dir, version):
+    """动态生成 setup.iss 文件"""
+    iss_content = f"""; BBH3ScanLaunch 安装包脚本 (动态生成)
+#define MyAppName "BBH3ScanLaunch"
+#define MyAppVersion "{version}"
+#define MyAppExeName "BBH3ScanLaunch.exe"
+
+[Setup]
+AppName={{#MyAppName}}
+AppVersion={{#MyAppVersion}}
+DefaultDirName={{autopf}}\{{#MyAppName}}
+DefaultGroupName={{#MyAppName}}
+OutputBaseFilename=BBH3ScanLaunch_Setup_v{{#MyAppVersion}}
+Compression=lzma
+SolidCompression=yes
+PrivilegesRequired=admin
+SetupIconFile=dist\BBH3ScanLaunch\BHimage.ico
+AppPublisher=BBH3ScanLaunch
+AppPublisherURL=https://github.com/your-repo
+AppSupportURL=https://github.com/your-repo
+AppUpdatesURL=https://github.com/your-repo
+
+[Files]
+Source: "dist\BBH3ScanLaunch\*"; Excludes: "config.json"; DestDir: "{{app}}\BBH3ScanLaunch"; Flags: ignoreversion recursesubdirs createallsubdirs
+
+[Icons]
+; 开始菜单快捷方式（带UAC）
+Name: "{{group}}\[仅B服] 崩坏3扫码器"; Filename: "{{app}}\BBH3ScanLaunch\{{#MyAppExeName}}"; IconFilename: "{{app}}\BBH3ScanLaunch\BHimage.ico"
+Name: "{{group}}\[仅B服] 一键登陆崩坏3"; Filename: "{{app}}\BBH3ScanLaunch\{{#MyAppExeName}}"; Parameters: "--auto-login"; IconFilename: "{{app}}\BBH3ScanLaunch\BHimage.ico"
+
+; 桌面快捷方式（带UAC） - 直接创建不询问
+Name: "{{autodesktop}}\[仅B服] 崩坏3扫码器"; Filename: "{{app}}\BBH3ScanLaunch\{{#MyAppExeName}}"; IconFilename: "{{app}}\BBH3ScanLaunch\BHimage.ico"
+Name: "{{autodesktop}}\[仅B服] 一键登陆崩坏3"; Filename: "{{app}}\BBH3ScanLaunch\{{#MyAppExeName}}"; Parameters: "--auto-login"; IconFilename: "{{app}}\BBH3ScanLaunch\BHimage.ico"
+
+[Run]
+Filename: "{{app}}\BBH3ScanLaunch\{{#MyAppExeName}}"; Description: "{{cm:LaunchProgram,{{#MyAppName}}}}"; Flags: nowait postinstall skipifsilent runascurrentuser
+
+[Registry]
+; 为EXE添加UAC清单（如果程序本身没有）
+Root: HKLM; Subkey: "SOFTWARE\Microsoft\Windows NT\CurrentVersion\AppCompatFlags\Layers"; \
+    ValueType: String; ValueName: "{{app}}\BBH3ScanLaunch\{{#MyAppExeName}}"; ValueData: "RUNASADMIN"; Flags: uninsdeletevalue
+"""
+
+    iss_file = script_dir / "setup.iss"
+    with open(iss_file, 'w', encoding='utf-8') as f:
+        f.write(iss_content)
+    print(f"✅ 已动态生成 setup.iss 文件，版本号: {version}")
+    return iss_file
 
 def check_required_files(script_dir):
     """检查必要的文件是否存在"""
@@ -21,6 +73,7 @@ def check_required_files(script_dir):
         app_dir,  # 主程序目录
         app_dir / "Pictures_to_Match",
         app_dir / "templates",
+        app_dir / "updates",
     ]
     
     print("检查必要文件...")
@@ -55,14 +108,6 @@ def check_blacklist_files(app_dir):
         print("✓ 未发现黑名单文件")
         return False
 
-def extract_version_from_filename(filename):
-    """从安装包文件名中提取版本号"""
-    # 匹配格式: BBH3ScanLaunch_Setup_v1.1.exe
-    match = re.search(r'BBH3ScanLaunch_Setup_v(\d+\.\d+)\.exe', filename)
-    if match:
-        return match.group(1)
-    return "1.0"  # 默认版本号
-
 def format_file_size(size_in_bytes):
     """格式化文件大小为MB字符串"""
     size_in_mb = size_in_bytes / (1024 * 1024)
@@ -70,8 +115,6 @@ def format_file_size(size_in_bytes):
 
 def generate_version_info(script_dir, setup_filename):
     """生成版本信息JSON"""
-    # 提取版本号
-    version = extract_version_from_filename(setup_filename)
     
     # 当前日期
     release_date = datetime.now().strftime("%Y-%m-%d")
@@ -131,6 +174,29 @@ def rename_output_to_app(script_dir):
         return setup_files[0].name
     return None
 
+def find_inno_compiler():
+    """查找 Inno Setup 编译器"""
+    possible_paths = [
+        "D:/Program Files (x86)/Inno Setup 6/ISCC.exe",
+        "C:/Program Files (x86)/Inno Setup 6/ISCC.exe",
+        "C:/Program Files/Inno Setup 6/ISCC.exe",
+        "D:/Program Files/Inno Setup 6/ISCC.exe"
+    ]
+    
+    for path in possible_paths:
+        if os.path.exists(path):
+            return Path(path)
+    
+    # 尝试在 PATH 中查找
+    try:
+        result = subprocess.run(["where", "ISCC.exe"], capture_output=True, text=True, shell=True, encoding='utf-8')
+        if result.returncode == 0 and result.stdout.strip():
+            return Path(result.stdout.strip().split('\n')[0])
+    except:
+        pass
+    
+    return None
+
 def build_installer():
     """构建安装包"""
     script_dir = Path(__file__).parent.resolve()
@@ -156,11 +222,8 @@ def build_installer():
         print("💡 请先安装 Inno Setup 6 或更高版本")
         return False
     
-    # 检查 ISS 文件
-    iss_file = script_dir / "setup.iss"
-    if not iss_file.exists():
-        print("❌ 错误：找不到 setup.iss 文件")
-        return False
+    # 动态生成 ISS 文件
+    iss_file = generate_iss_file(script_dir, version)
     
     print(f"\n🚀 正在编译安装包...")
     try:
@@ -175,6 +238,13 @@ def build_installer():
         ], check=True, capture_output=True, text=True, cwd=script_dir, encoding='utf-8')
         
         print("✅ 安装包编译成功！")
+        
+        # 编译完成后删除临时 ISS 文件
+        try:
+            iss_file.unlink()
+            print("♻ 已删除临时 setup.iss 文件")
+        except Exception as e:
+            print(f"⚠ 警告：无法删除临时 setup.iss 文件: {e}")
         
         # 重命名Output为app并获取安装包文件名
         setup_filename = rename_output_to_app(script_dir)
@@ -191,12 +261,10 @@ def build_installer():
         print(f"❌ 编译失败: {e}")
         if e.stderr:
             print(f"错误输出: {e.stderr}")
-        # 也显示 stdout，因为 Inno Setup 错误信息通常在 stdout 中
         if e.stdout:
             print(f"详细信息: {e.stdout}")
         return False
     except UnicodeDecodeError as e:
-        # 处理编码错误，但不中断流程（因为安装包可能已经成功生成）
         print("⚠ 编码警告（不影响安装包生成）:", str(e))
         print("✅ 安装包编译成功！")
         
@@ -213,29 +281,6 @@ def build_installer():
     except Exception as e:
         print(f"❌ 发生错误: {e}")
         return False
-
-def find_inno_compiler():
-    """查找 Inno Setup 编译器"""
-    possible_paths = [
-        "D:/Program Files (x86)/Inno Setup 6/ISCC.exe",
-        "C:/Program Files (x86)/Inno Setup 6/ISCC.exe",
-        "C:/Program Files/Inno Setup 6/ISCC.exe",
-        "D:/Program Files/Inno Setup 6/ISCC.exe"
-    ]
-    
-    for path in possible_paths:
-        if os.path.exists(path):
-            return Path(path)
-    
-    # 尝试在 PATH 中查找
-    try:
-        result = subprocess.run(["where", "ISCC.exe"], capture_output=True, text=True, shell=True, encoding='utf-8')
-        if result.returncode == 0 and result.stdout.strip():
-            return Path(result.stdout.strip().split('\n')[0])
-    except:
-        pass
-    
-    return None
 
 def main():
     """主函数"""

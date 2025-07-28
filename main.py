@@ -14,7 +14,7 @@ from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QApplication, QMainWindow, QFileDialog, QMessageBox, QTextEdit, QWidget, QVBoxLayout # 添加 QTextEdit, QWidget, QVBoxLayout
 import bsgamesdk
 import mihoyosdk
-import mainWindow  # 假设这是包含更新后 Ui_MainWindow 的文件
+import mainWindow
 from bh3_utils import image_processor, is_game_window_exist, click_center_of_game_window
 from utils import EmittingStream
 
@@ -282,8 +282,8 @@ class SelfMainWindow(QMainWindow):
         config_manager.write_conf(config)
         for checkbox, prefix in [
             (ui.clipCheck, "当前状态"),
-            (ui.autoClipCheck, "当前状态"),
-            (ui.autoCloseCheck, "当前状态"),
+            (ui.autoClip, "当前状态"),
+            (ui.autoClose, "当前状态"),
             (ui.autoClick, "当前状态")
         ]:
             checkbox.setChecked(True)
@@ -299,53 +299,13 @@ class SelfMainWindow(QMainWindow):
         config_manager.write_conf(config)
         for checkbox, feature, prefix in [
             (ui.clipCheck, 'clip_check', "当前状态"),
-            (ui.autoClipCheck, 'auto_clip', "当前状态"),
-            (ui.autoCloseCheck, 'auto_close', "当前状态"),
+            (ui.autoClip, 'auto_clip', "当前状态"),
+            (ui.autoClose, 'auto_close', "当前状态"),
             (ui.autoClick, 'auto_click', "当前状态"),
         ]:
             checkbox.setChecked(config.get(feature, False))
             self.update_status_text(checkbox, prefix)
         print("[INFO] 一键登陆模式已结束，恢复原始设置")
-
-    # --- 新增方法以适配更新后的UI ---
-    def show_documentation(self, doc_type):
-        """显示说明文档或更新日志"""
-        if doc_type == "instructions":
-            # 使用信息框显示 UI 中定义的帮助文本
-            # 注意：get_help_text 现在返回纯文本
-            instructions = ui.get_help_text()
-            QMessageBox.information(self, "使用说明", instructions, QMessageBox.StandardButton.Ok)
-
-        elif doc_type == "changelog":
-            # 示例：假设你有一个 CHANGELOG.txt 文件
-            changelog_path = "CHANGELOG.txt" # 或 "changelog.html"
-            if os.path.exists(changelog_path):
-                try:
-                    with open(changelog_path, 'r', encoding='utf-8') as f: # 注意编码
-                        changelog_text = f.read()
-                    # 用一个单独的窗口显示
-                    self.show_text_window("更新日志", changelog_text)
-
-                except Exception as e:
-                    print(f"[WARNING] 读取更新日志失败: {e}")
-                    # QMessageBox.warning(self, "错误", f"无法读取更新日志: {e}")
-            else:
-                 # 如果没有本地文件，可以打开网页链接 (需要替换为实际链接)
-                 # webbrowser.open("https://your-changelog-url.com")
-                 print(f"[WARNING] 未找到更新日志文件 CHANGELOG.txt")
-
-    def show_text_window(self, title, text):
-        """显示一个包含文本的新窗口"""
-        text_window = QWidget()
-        text_window.setWindowTitle(title)
-        layout = QVBoxLayout(text_window)
-        text_edit = QTextEdit()
-        text_edit.setReadOnly(True)
-        text_edit.setPlainText(text) # 如果是纯文本
-        # text_edit.setHtml(text) # 如果是 HTML
-        layout.addWidget(text_edit)
-        text_window.resize(600, 400) # 设置合适大小
-        text_window.show()
 
     def check_for_updates(self):
         """检查更新"""
@@ -433,8 +393,8 @@ if __name__ == '__main__':
     # 应用配置到UI控件 (移到 setupUi 之后)
     for checkbox, feature, prefix in [
         (ui.clipCheck, 'clip_check', "当前状态"),
-        (ui.autoCloseCheck, 'auto_close', "当前状态"),
-        (ui.autoClipCheck, 'auto_clip', "当前状态"),
+        (ui.autoClose, 'auto_close', "当前状态"),
+        (ui.autoClip, 'auto_clip', "当前状态"),
         (ui.autoClick, 'auto_click', "当前状态"),
         (ui.debugPrint, 'debug_print', "当前状态")
     ]:
