@@ -2,7 +2,6 @@ import os
 import sys
 import subprocess
 import shutil
-import re
 import json
 from datetime import datetime
 from pathlib import Path
@@ -16,8 +15,11 @@ BLACKLIST_FILES = [
 ]
 
 def generate_iss_file(script_dir, version):
-    """动态生成 setup.iss 文件（添加64位支持和卸载选项）"""
-    iss_content = f"""; BBH3ScanLaunch 安装包脚本 (动态生成)
+    """动态生成 setup.iss 文件"""
+    print("正在生成安装脚本...")
+    
+    # 使用普通字符串，然后通过替换来避免转义警告
+    iss_content_template = """; BBH3ScanLaunch 安装包脚本
 #define MyAppName "BBH3ScanLaunch"
 #define MyAppVersion "{version}"
 #define MyAppExeName "BBH3ScanLaunch.exe"
@@ -25,42 +27,39 @@ def generate_iss_file(script_dir, version):
 [Setup]
 AppName={{#MyAppName}}
 AppVersion={{#MyAppVersion}}
-DefaultDirName={{autopf}}\{{#MyAppName}}
+AppVerName={{#MyAppName}} {{#MyAppVersion}}
+DefaultDirName={{autopf}}\\{{#MyAppName}}
 DefaultGroupName={{#MyAppName}}
+VersionInfoVersion={version}
+VersionInfoCompany=BBH3ScanLaunch
+VersionInfoDescription=BBH3ScanLaunch Installer
+VersionInfoTextVersion={version}
 OutputBaseFilename=BBH3ScanLaunch_Setup_v{{#MyAppVersion}}
 Compression=lzma
 SolidCompression=yes
 PrivilegesRequired=admin
-SetupIconFile=dist\BBH3ScanLaunch\BHimage.ico
+SetupIconFile=dist\\BBH3ScanLaunch\\BHimage.ico
 AppPublisher=BBH3ScanLaunch
-AppPublisherURL=https://github.com/your-repo
-AppSupportURL=https://github.com/your-repo
-AppUpdatesURL=https://github.com/your-repo
-; 添加64位支持
 ArchitecturesInstallIn64BitMode=x64
 ArchitecturesAllowed=x64
 
 [Files]
-Source: "dist\BBH3ScanLaunch\*"; Excludes: "config.json"; DestDir: "{{app}}\BBH3ScanLaunch"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "dist\\BBH3ScanLaunch\\*"; Excludes: "config.json"; DestDir: "{{app}}\\BBH3ScanLaunch"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
-; 开始菜单快捷方式（带UAC）
-Name: "{{group}}\BBH3ScanLaunch"; Filename: "{{app}}\BBH3ScanLaunch\{{#MyAppExeName}}"; IconFilename: "{{app}}\BBH3ScanLaunch\BHimage.ico"
-Name: "{{group}}\AutoLoginBBH3"; Filename: "{{app}}\BBH3ScanLaunch\{{#MyAppExeName}}"; Parameters: "--auto-login"; IconFilename: "{{app}}\BBH3ScanLaunch\BHimage.ico"
-; 桌面快捷方式（带UAC） - 直接创建不询问
-Name: "{{autodesktop}}\BBH3ScanLaunch"; Filename: "{{app}}\BBH3ScanLaunch\{{#MyAppExeName}}"; IconFilename: "{{app}}\BBH3ScanLaunch\BHimage.ico"
-Name: "{{autodesktop}}\AutoLoginBBH3"; Filename: "{{app}}\BBH3ScanLaunch\{{#MyAppExeName}}"; Parameters: "--auto-login"; IconFilename: "{{app}}\BBH3ScanLaunch\BHimage.ico"
+Name: "{{group}}\\BBH3ScanLaunch"; Filename: "{{app}}\\BBH3ScanLaunch\\{{#MyAppExeName}}"; IconFilename: "{{app}}\\BBH3ScanLaunch\\BHimage.ico"
+Name: "{{group}}\\AutoLoginBBH3"; Filename: "{{app}}\\BBH3ScanLaunch\\{{#MyAppExeName}}"; Parameters: "--auto-login"; IconFilename: "{{app}}\\BBH3ScanLaunch\\BHimage.ico"
+Name: "{{autodesktop}}\\BBH3ScanLaunch"; Filename: "{{app}}\\BBH3ScanLaunch\\{{#MyAppExeName}}"; IconFilename: "{{app}}\\BBH3ScanLaunch\\BHimage.ico"
+Name: "{{autodesktop}}\\AutoLoginBBH3"; Filename: "{{app}}\\BBH3ScanLaunch\\{{#MyAppExeName}}"; Parameters: "--auto-login"; IconFilename: "{{app}}\\BBH3ScanLaunch\\BHimage.ico"
 
 [Run]
-Filename: "{{app}}\BBH3ScanLaunch\{{#MyAppExeName}}"; Description: "{{cm:LaunchProgram,{{#MyAppName}}}}"; Flags: nowait postinstall skipifsilent runascurrentuser
+Filename: "{{app}}\\BBH3ScanLaunch\\{{#MyAppExeName}}"; Description: "{{cm:LaunchProgram,{{#MyAppName}}}}"; Flags: nowait postinstall skipifsilent runascurrentuser
 
 [Registry]
-; 为EXE添加UAC清单（如果程序本身没有）
-Root: HKLM; Subkey: "SOFTWARE\Microsoft\Windows NT\CurrentVersion\AppCompatFlags\Layers"; \
-    ValueType: String; ValueName: "{{app}}\BBH3ScanLaunch\{{#MyAppExeName}}"; ValueData: "RUNASADMIN"; Flags: uninsdeletevalue
+Root: HKLM; Subkey: "SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\AppCompatFlags\\Layers"; \\
+    ValueType: String; ValueName: "{{app}}\\BBH3ScanLaunch\\{{#MyAppExeName}}"; ValueData: "RUNASADMIN"; Flags: uninsdeletevalue
 
 [Code]
-// 自定义卸载过程 - 询问是否删除用户配置
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
 var
   appDataPath: string;
@@ -70,23 +69,15 @@ begin
   case CurUninstallStep of
     usPostUninstall:
       begin
-        // 获取用户数据目录
         appDataPath := ExpandConstant('{{localappdata}}');
-        userDataPath := appDataPath + '\\BBH3ScanLaunch';
-        
-        // 检查用户数据目录是否存在
+        userDataPath := appDataPath + '\\\\BBH3ScanLaunch';
         if DirExists(userDataPath) then
         begin
-          // 询问用户是否删除配置
           choice := MsgBox('是否删除用户配置数据？' #13#13 '路径: ' + userDataPath, 
             mbConfirmation, MB_YESNO or MB_DEFBUTTON2);
-            
           if choice = IDYES then
           begin
-            // 删除用户数据目录
-            if DelTree(userDataPath, True, True, True) then
-              MsgBox('用户配置数据已成功删除。', mbInformation, MB_OK)
-            else
+            if not DelTree(userDataPath, True, True, True) then
               MsgBox('无法完全删除用户配置数据，部分文件可能被占用。', mbError, MB_OK);
           end;
         end;
@@ -94,11 +85,13 @@ begin
   end;
 end;
 """
-
+    
+    # 格式化版本号
+    iss_content = iss_content_template.format(version=version)
+    
     iss_file = script_dir / "setup.iss"
     with open(iss_file, 'w', encoding='utf-8') as f:
         f.write(iss_content)
-    print(f"✅ 已动态生成 setup.iss 文件，版本号: {version}")
     return iss_file
 
 def check_required_files(script_dir):
@@ -107,43 +100,25 @@ def check_required_files(script_dir):
     required_paths = [
         app_dir / "BBH3ScanLaunch.exe",
         app_dir / "BHimage.ico",
-        app_dir,  # 主程序目录
+        app_dir,
         app_dir / "Pictures_to_Match",
         app_dir / "templates",
-        app_dir / "updates",
     ]
     
-    print("检查必要文件...")
     missing_files = []
     for path in required_paths:
         if not path.exists():
-            print(f"❌ 错误：找不到必要路径 {path}")
             missing_files.append(path)
-        else:
-            if path.is_file():
-                print(f"✓ 找到文件: {path.relative_to(script_dir)}")
-            else:
-                print(f"✓ 找到目录: {path.relative_to(script_dir)}")
     
     return len(missing_files) == 0
 
 def check_blacklist_files(app_dir):
-    """检查黑名单文件是否存在，如果存在则给出警告"""
-    print("\n检查黑名单文件...")
-    blacklist_found = []
-    
+    """检查黑名单文件"""
     for blacklist_file in BLACKLIST_FILES:
         file_path = app_dir / blacklist_file
         if file_path.exists():
-            print(f"⚠ 警告：黑名单文件存在 {file_path.relative_to(app_dir)}")
-            blacklist_found.append(file_path)
-    
-    if blacklist_found:
-        print("💡 这些文件将通过 Inno Setup 的 Excludes 选项自动排除")
-        return True
-    else:
-        print("✓ 未发现黑名单文件")
-        return False
+            return True
+    return False
 
 def format_file_size(size_in_bytes):
     """格式化文件大小为MB字符串"""
@@ -152,22 +127,16 @@ def format_file_size(size_in_bytes):
 
 def generate_version_info(script_dir, setup_filename):
     """生成版本信息JSON"""
-    
-    # 当前日期
     release_date = datetime.now().strftime("%Y-%m-%d")
-    
-    # 文件大小
     setup_path = script_dir / "app" / setup_filename
+
+    size = "0MB"
     if setup_path.exists():
         size = format_file_size(setup_path.stat().st_size)
-    else:
-        size = "0MB"
-    
-    # 构建下载URL
+
     download_url = f"https://cdn.jsdelivr.net/gh/LoveElysia1314/BBH3ScanLaunch@main/app/{setup_filename}"
     changelog_url = "https://cdn.jsdelivr.net/gh/LoveElysia1314/BBH3ScanLaunch@main/updates/changelog.txt"
-    
-    # 创建版本信息字典
+
     version_info = {
         "version": version,
         "release_date": release_date,
@@ -175,55 +144,43 @@ def generate_version_info(script_dir, setup_filename):
         "changelog": changelog_url,
         "size": size
     }
-    
-    # 创建updates目录并写入文件
+
     updates_dir = script_dir / "updates"
     updates_dir.mkdir(exist_ok=True)
-    
+
     version_file = updates_dir / "version.json"
     with open(version_file, 'w', encoding='utf-8') as f:
         json.dump(version_info, f, indent=4, ensure_ascii=False)
-    
-    print(f"✅ 已生成版本信息文件: {version_file}")
-    print(json.dumps(version_info, indent=4, ensure_ascii=False))
+
+    return version_info
 
 def move_output_to_app(script_dir):
-    """将Output文件夹中的文件移动到app文件夹，然后删除Output文件夹"""
+    """将Output文件夹中的文件移动到app文件夹"""
     output_dir = script_dir / "Output"
     app_dir = script_dir / "app"
-    
+
     if not output_dir.exists():
-        print("⚠ 警告：Output目录不存在，跳过移动")
         return None
-    
-    # 确保app目录存在
+
     app_dir.mkdir(exist_ok=True)
-    
-    # 移动所有文件到app目录
     setup_files = []
+
     for item in output_dir.iterdir():
         if item.is_file():
             dest = app_dir / item.name
-            # 如果目标文件已存在，先删除
             if dest.exists():
                 dest.unlink()
             shutil.move(str(item), str(dest))
             setup_files.append(dest)
-            print(f"📦 移动文件: {item.name} → app/")
-    
-    # 删除Output目录
+
     try:
         shutil.rmtree(output_dir)
-        print("♻ 已删除Output目录")
-    except Exception as e:
-        print(f"⚠ 警告：无法删除Output目录: {e}")
-    
-    # 返回安装包文件名
-    if setup_files:
-        # 查找主要的安装包文件
-        for file in setup_files:
-            if file.name.startswith("BBH3ScanLaunch_Setup_v"):
-                return file.name
+    except Exception:
+        pass
+
+    for file in setup_files:
+        if file.name.startswith("BBH3ScanLaunch_Setup_v"):
+            return file.name
     return None
 
 def find_inno_compiler():
@@ -234,126 +191,78 @@ def find_inno_compiler():
         "C:/Program Files/Inno Setup 6/ISCC.exe",
         "D:/Program Files/Inno Setup 6/ISCC.exe"
     ]
-    
+
     for path in possible_paths:
         if os.path.exists(path):
             return Path(path)
-    
-    # 尝试在 PATH 中查找
+
     try:
-        result = subprocess.run(["where", "ISCC.exe"], capture_output=True, text=True, shell=True, encoding='utf-8')
+        result = subprocess.run(["where", "ISCC.exe"], capture_output=True, text=True, shell=True)
         if result.returncode == 0 and result.stdout.strip():
             return Path(result.stdout.strip().split('\n')[0])
     except:
         pass
-    
+
     return None
 
 def build_installer():
     """构建安装包"""
     script_dir = Path(__file__).parent.resolve()
-    
-    # 检查必要的文件是否存在
+
     if not check_required_files(script_dir):
+        print("错误：缺少必要文件")
         return False
-    
+
     app_dir = script_dir / "dist" / "BBH3ScanLaunch"
-    
-    # 检查 _internal 目录（如果存在）
-    internal_dir = app_dir / "_internal"
-    if internal_dir.exists():
-        print(f"✓ 找到目录: {internal_dir.relative_to(script_dir)}")
-    
-    # 检查黑名单文件
-    check_blacklist_files(app_dir)
-    
-    # 检查 Inno Setup 编译器
+
     inno_compiler = find_inno_compiler()
     if not inno_compiler:
-        print("❌ 错误：未找到 Inno Setup 编译器")
-        print("💡 请先安装 Inno Setup 6 或更高版本")
+        print("错误：未找到 Inno Setup 编译器")
         return False
-    
-    # 动态生成 ISS 文件
+
     iss_file = generate_iss_file(script_dir, version)
-    
-    print(f"\n🚀 正在编译64位安装包...")
+
     try:
-        # 确保输出目录存在
         output_dir = script_dir / "Output"
         output_dir.mkdir(exist_ok=True)
-        
-        # 使用正确的编码处理 subprocess 输出
-        result = subprocess.run([
-            str(inno_compiler),
-            str(iss_file)
-        ], check=True, capture_output=True, text=True, cwd=script_dir, encoding='utf-8')
-        
-        print("✅ 64位安装包编译成功！")
-        
-        # 编译完成后删除临时 ISS 文件
+
+        print("正在编译安装包...")
+        result = subprocess.run(
+            [str(inno_compiler), str(iss_file)],
+            check=True,
+            capture_output=True,
+            text=True,
+            cwd=script_dir,
+            encoding='utf-8'
+        )
+
         try:
             iss_file.unlink()
-            print("♻ 已删除临时 setup.iss 文件")
-        except Exception as e:
-            print(f"⚠ 警告：无法删除临时 setup.iss 文件: {e}")
-        
-        # 将Output中的文件移动到app目录
+        except Exception:
+            pass
+
         setup_filename = move_output_to_app(script_dir)
-        
+
         if setup_filename:
-            # 生成版本信息文件
-            generate_version_info(script_dir, setup_filename)
-        else:
-            print("⚠ 警告：未找到安装包文件，跳过生成版本信息")
-            
+            version_info = generate_version_info(script_dir, setup_filename)
+            print(f"安装包版本: {version_info['version']}")
+            print(f"安装包大小: {version_info['size']}")
+
         return True
-        
+
     except subprocess.CalledProcessError as e:
-        print(f"❌ 编译失败: {e}")
-        if e.stderr:
-            print(f"错误输出: {e.stderr}")
-        if e.stdout:
-            print(f"详细信息: {e.stdout}")
+        print(f"编译失败: {e.stderr if e.stderr else e.stdout}")
         return False
-    except UnicodeDecodeError as e:
-        print("⚠ 编码警告（不影响安装包生成）:", str(e))
-        print("✅ 安装包编译成功！")
-        
-        # 将Output中的文件移动到app目录
-        setup_filename = move_output_to_app(script_dir)
-        
-        if setup_filename:
-            # 生成版本信息文件
-            generate_version_info(script_dir, setup_filename)
-        else:
-            print("⚠ 警告：未找到安装包文件，跳过生成版本信息")
-            
-        return True
     except Exception as e:
-        print(f"❌ 发生错误: {e}")
+        print(f"发生错误: {str(e)}")
         return False
 
 def main():
-    """主函数"""
-    print("🚀 开始构建 BBH3ScanLaunch 安装包...")
-    print("=" * 50)
-    print("💡 注意：此安装包需要管理员权限（UAC）")
-    print("💡 目标平台：64位 Windows")
-    
+    print("开始构建安装包...")
     if build_installer():
-        print("\n🎉 恭喜！64位安装包构建完成！")
-        print("📦 安装包位于 app 目录中")
-        print("📄 版本信息已保存到 updates/version.json")
-        print("🛡️  安装时将要求管理员权限（UAC）")
-        print("📋 安装后将自动创建以下快捷方式：")
-        print("   - 开始菜单: BBH3ScanLaunch")
-        print("   - 开始菜单: AutoLoginBBH3 (带--auto-login参数)")
-        print("   - 桌面: BBH3ScanLaunch")
-        print("   - 桌面: AutoLoginBBH3 (带--auto-login参数)")
-        print("🗑️  卸载时将询问是否删除用户配置数据")
+        print("安装包构建成功")
     else:
-        print("\n❌ 安装包构建失败！")
+        print("安装包构建失败")
         sys.exit(1)
 
 if __name__ == "__main__":

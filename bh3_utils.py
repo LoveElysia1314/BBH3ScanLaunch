@@ -2,8 +2,8 @@
 import os
 import re
 import time
-import cv2
 import numpy as np
+from cv2 import matchTemplate, TM_CCOEFF_NORMED, minMaxLoc
 from ctypes import windll
 from PIL import Image, ImageGrab
 import pyautogui
@@ -173,19 +173,19 @@ class ImageProcessor:
                 continue
 
             #print(f"[DEBUG] 加载模板: {filename} (源分辨率: {src_resolution}p)")
-            template = cv2.imread(file_path, cv2.IMREAD_GRAYSCALE)
-            if template is None:
-                print(f"[WARNING] 无法加载模板: {filename}")
+            try:
+                # 使用PIL代替cv2加载和缩放模板
+                template_img = Image.open(file_path).convert('L')
+                scale_factor = self.screen_height / src_resolution
+                new_width = int(template_img.width * scale_factor)
+                new_height = int(template_img.height * scale_factor)
+                scaled_template = template_img.resize((new_width, new_height), Image.LANCZOS)
+                
+                # 缓存PIL图像对象
+                self.template_cache[filename] = scaled_template
+            except Exception as e:
+                print(f"[WARNING] 加载或缩放模板出错: {filename}, {e}")
                 continue
-
-            # 计算缩放比例并缩放模板
-            scale_factor = self.screen_height / src_resolution
-            new_size = (int(template.shape[1] * scale_factor), 
-                      int(template.shape[0] * scale_factor))
-            scaled_template = cv2.resize(template, new_size)
-            
-            # 缓存缩放后的模板
-            self.template_cache[filename] = scaled_template
             loaded_count += 1
             #print(f"[DEBUG] 已缓存模板: {filename} ({new_size[0]}x{new_size[1]})")
 
@@ -207,8 +207,7 @@ class ImageProcessor:
             print("[WARNING] 屏幕捕获失败")
             return None
         
-        screen_np = np.array(pil_img)
-        return cv2.cvtColor(screen_np, cv2.COLOR_RGB2GRAY)
+        return pil_img.convert('L')
 
     def match_template(self, template_name, screen_gray, threshold=0.8):
         """在屏幕图像中匹配指定模板，返回匹配位置和置信度"""
@@ -221,13 +220,19 @@ class ImageProcessor:
         if screen_gray is None:
             return None, 0
 
-        result = cv2.matchTemplate(screen_gray, template, cv2.TM_CCOEFF_NORMED)
-        min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(result)
+        # 将PIL图像转为numpy数组进行模板匹配
+        screen_np = np.array(screen_gray) if not isinstance(screen_gray, np.ndarray) else screen_gray
+        template_np = np.array(template) if not isinstance(template, np.ndarray) else template
+        
+        result = matchTemplate(screen_np, template_np, TM_CCOEFF_NORMED)
+        min_val, max_val, min_loc, max_loc = minMaxLoc(result)
         #print(f"[DEBUG] 模板匹配结果 - 最大置信度: {max_val:.2f}")
         
         if max_val >= threshold:
-            x = max_loc[0] + template.shape[1] // 2
-            y = max_loc[1] + template.shape[0] // 2
+            # 使用PIL图像的size属性替代numpy的shape
+            template_width, template_height = template.size
+            x = max_loc[0] + template_width // 2
+            y = max_loc[1] + template_height // 2
             #print(f"[DEBUG] 找到匹配位置: ({x}, {y})")
             return (x, y), max_val
         return None, max_val
@@ -293,7 +298,7 @@ class ImageProcessor:
                 print("[DEBUG] 无效的二维码格式")
                 return False
                 
-            ticket = next((p.split('=')[1] for p in url.split('?')[1].split('&') 
+            ticket = next((p.split('=')[1] for p in url.split('?')[1].split('&')
                           if p.startswith('ticket=')), None)
                           
             if ticket and config and bh_info:
