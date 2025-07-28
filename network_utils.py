@@ -1,5 +1,6 @@
 import asyncio
 import requests
+from version_utils import version_manager  # 导入版本管理器
 
 async def sendPost(target, data, noReturn=False):
     try:
@@ -78,7 +79,7 @@ from packaging import version
 
 class NetworkManager:
     def __init__(self):
-        self.current_version = "1.1.0"
+        self.current_version = version_manager.get_current_version()
         # CDN镜像源列表
         self.cdn_mirrors = [
             "https://cdn.jsdelivr.net",
@@ -87,10 +88,6 @@ class NetworkManager:
             "https://jsd.onmicrosoft.cn",
             "https://jsd.cdn.zzko.cn"
         ]
-    
-    def set_current_version(self, version_str):
-        """设置当前程序版本"""
-        self.current_version = version_str
     
     def fetch_from_multiple_sources(self, base_url, timeout=5):
         """
@@ -183,6 +180,7 @@ class NetworkManager:
                 
                 # 比较版本号
                 if version.parse(remote_version) > version.parse(self.current_version):
+                    print(f"[INFO] 检查更新完成。当前版本: {self.current_version}, 最新版本: {remote_version}")
                     return {
                         "has_update": True,
                         "version": remote_version,
@@ -192,9 +190,12 @@ class NetworkManager:
                         "release_date": remote_data.get("release_date", "")
                     }
                 else:
-                    return {"has_update": False}
+                    print(f"[INFO] 检查更新完成。当前已是最新版本: {self.current_version}")
+                    return {"has_update": False, "version": remote_version}
             else:
+                print(f'[ERROR] 检查更新失败，无法获取版本信息')
                 return {"has_update": False, "error": "无法获取版本信息"}
+                
                 
         except Exception as e:
             print(f'[ERROR] 检查更新失败: {str(e)}')

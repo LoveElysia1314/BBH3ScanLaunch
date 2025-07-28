@@ -4,6 +4,8 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (QDialog, QDialogButtonBox, QLabel, QLineEdit,
                                QVBoxLayout, QHBoxLayout, QTextBrowser)
 
+from version_utils import version_manager
+
 class LoginDialog(QDialog):
     """
     账号登录对话框
@@ -186,7 +188,7 @@ class Ui_MainWindow:
             gridLayout.addWidget(btn, 0, col)
         
         # 更新状态标签
-        self.updateStatusLabel = QtWidgets.QLabel("当前版本: v1.1")
+        self.updateStatusLabel = QtWidgets.QLabel(f"当前版本：{version_manager.get_current_version()}")
         self.updateStatusLabel.setAlignment(Qt.AlignmentFlag.AlignCenter)
         gridLayout.addWidget(self.updateStatusLabel, 0, 3)
         
@@ -208,7 +210,7 @@ class Ui_MainWindow:
     def retranslateUi(self, MainWindow):
         """设置窗口标题和初始化文本"""
         _translate = QtCore.QCoreApplication.translate
-        MainWindow.setWindowTitle(_translate("MainWindow", "B服崩坏3扫码登陆器 v1.1"))
+        MainWindow.setWindowTitle(_translate("MainWindow", "B服崩坏3扫码登陆器"))
         self.logText.setPlainText("系统初始化完成，等待操作...")
 
     def connectSignals(self, MainWindow):

@@ -7,6 +7,7 @@ import requests
 from urllib.parse import urlparse
 import concurrent.futures
 import time
+from version_utils import version_manager
 from network_utils import network_manager  # 导入新的网络模块
 
 class ConfigManager:
@@ -24,8 +25,7 @@ class ConfigManager:
         "auto_close": False,
         "auto_clip": False,
         "auto_click": False,
-        "debug_print": False,
-        "program_version": "1.0.0"  # 添加程序版本字段
+        "debug_print": False
     }
 
     def __init__(self):
@@ -36,9 +36,8 @@ class ConfigManager:
         self.bh_info = {}
         self.data = {}
         self.cap = None
-        
-        # 设置当前程序版本
-        network_manager.set_current_version(self.DEFAULT_CONFIG.get("program_version", "1.0.0"))
+        # 从权威源获取版本
+        self.current_version = version_manager.get_current_version()
         
         self._ensure_oa_token_file()
         # 从oa_token.json读取oa_token和bh_ver
@@ -94,9 +93,6 @@ class ConfigManager:
                     print('[INFO] 配置文件包含无效字段，正在优化...')
                     with open(config_path, 'w') as f:
                         json.dump(merged_config, f, indent=4)
-                
-                # 更新网络管理器的版本
-                network_manager.set_current_version(merged_config.get("program_version", "1.0.0"))
                 
                 return merged_config
                 
@@ -168,10 +164,11 @@ class ConfigManager:
         network_manager.set_current_version(version_str)
         self.write_conf(self.config)
 
+# 创建配置管理器实例
+config_manager = ConfigManager()
+
 # 使用示例
 if __name__ == "__main__":
-    # 创建配置管理器实例
-    config_manager = ConfigManager()
     
     # 获取OA Token
     print("OA Token:", config_manager.oa_token)
