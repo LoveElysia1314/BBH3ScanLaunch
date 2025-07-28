@@ -2,7 +2,6 @@ import os
 import sys
 import subprocess
 import shutil
-import re
 import json
 from datetime import datetime
 from pathlib import Path

@@ -3,10 +3,6 @@ import json
 import os
 import threading
 from json.decoder import JSONDecodeError
-import requests
-from urllib.parse import urlparse
-import concurrent.futures
-import time
 from version_utils import version_manager
 from network_utils import network_manager  # 导入新的网络模块
 

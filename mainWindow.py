@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
-from PySide6 import QtCore, QtWidgets
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QMetaObject, QCoreApplication
 from PySide6.QtWidgets import (QDialog, QDialogButtonBox, QLabel, QLineEdit,
-                               QVBoxLayout, QHBoxLayout, QTextBrowser, QTextEdit, QWidget, QPushButton, QTabWidget)
+                               QVBoxLayout, QHBoxLayout, QTextBrowser, QWidget, QTabWidget,
+                               QMenuBar, QGroupBox, QGridLayout, QPushButton, QCheckBox,)
 
 from version_utils import version_manager
 
@@ -63,15 +63,15 @@ class Ui_MainWindow:
         MainWindow.setAttribute(Qt.WidgetAttribute.WA_Resized, True)
         
         # 主控件和布局
-        self.centralwidget = QtWidgets.QWidget(MainWindow)
-        self.mainLayout = QtWidgets.QHBoxLayout(self.centralwidget)
+        self.centralwidget = QWidget(MainWindow)
+        self.mainLayout = QHBoxLayout(self.centralwidget)
         
         # 创建左侧区域
         self.create_left_area()
         
         # 创建右侧区域
-        self.rightContainer = QtWidgets.QWidget()
-        right_layout = QtWidgets.QVBoxLayout(self.rightContainer)
+        self.rightContainer = QWidget()
+        right_layout = QVBoxLayout(self.rightContainer)
         
         # 添加功能组
         self.create_account_group(right_layout)
@@ -86,17 +86,17 @@ class Ui_MainWindow:
         MainWindow.setCentralWidget(self.centralwidget)
         
         # 菜单栏
-        self.menubar = QtWidgets.QMenuBar(MainWindow)
+        self.menubar = QMenuBar(MainWindow)
         MainWindow.setMenuBar(self.menubar)
         
         self.retranslateUi(MainWindow)
         self.connectSignals(MainWindow)
-        QtCore.QMetaObject.connectSlotsByName(MainWindow)
+        QMetaObject.connectSlotsByName(MainWindow)
 
     def create_left_area(self):
         """创建包含信息展示的左侧面板（使用分页控件）"""
-        self.leftContainer = QtWidgets.QWidget()
-        left_layout = QtWidgets.QVBoxLayout(self.leftContainer)
+        self.leftContainer = QWidget()
+        left_layout = QVBoxLayout(self.leftContainer)
         
         # 信息展示区域（使用分页控件）
         self.infoTabWidget = QTabWidget()
@@ -104,7 +104,7 @@ class Ui_MainWindow:
         
         # 第一页：运行日志
         self.logTab = QWidget()
-        logLayout = QtWidgets.QVBoxLayout(self.logTab)
+        logLayout = QVBoxLayout(self.logTab)
         self.logText = QTextBrowser()
         self.logText.setOpenExternalLinks(True)
         logLayout.addWidget(self.logText)
@@ -112,7 +112,7 @@ class Ui_MainWindow:
         
         # 第二页：程序说明
         self.helpTab = QWidget()
-        helpLayout = QtWidgets.QVBoxLayout(self.helpTab)
+        helpLayout = QVBoxLayout(self.helpTab)
         self.helpText = QTextBrowser()
         self.helpText.setOpenExternalLinks(True)
         self.helpText.setHtml(self.get_help_text())
@@ -121,7 +121,7 @@ class Ui_MainWindow:
         
         # 第三页：更新日志
         self.changelogTab = QWidget()
-        changelogLayout = QtWidgets.QVBoxLayout(self.changelogTab)
+        changelogLayout = QVBoxLayout(self.changelogTab)
         self.changelogText = QTextBrowser()
         self.changelogText.setOpenExternalLinks(True)
         self.changelogText.setPlainText(version_manager.read_changelog())
@@ -135,8 +135,8 @@ class Ui_MainWindow:
 
     def create_account_group(self, layout):
         """创建B站账号和游戏路径设置区域"""
-        self.accountGroup = QtWidgets.QGroupBox("账号设置")
-        gridLayout = QtWidgets.QGridLayout(self.accountGroup)
+        self.accountGroup = QGroupBox("账号设置")
+        gridLayout = QGridLayout(self.accountGroup)
         
         # 按钮配置
         buttons = [
@@ -145,8 +145,8 @@ class Ui_MainWindow:
         ]
         
         for row, (label_text, attr_name, btn_text) in enumerate(buttons):
-            label = QtWidgets.QLabel(label_text)
-            btn = QtWidgets.QPushButton(btn_text)
+            label = QLabel(label_text)
+            btn = QPushButton(btn_text)
             setattr(self, attr_name, btn)
             
             gridLayout.addWidget(label, row, 0)
@@ -156,8 +156,8 @@ class Ui_MainWindow:
 
     def create_features_group(self, layout):
         """创建二维码解析和自动操作功能开关区域"""
-        self.featureGroup = QtWidgets.QGroupBox("功能设置")
-        gridLayout = QtWidgets.QGridLayout(self.featureGroup)
+        self.featureGroup = QGroupBox("功能设置")
+        gridLayout = QGridLayout(self.featureGroup)
         
         # 复选框配置
         checkboxes = [
@@ -169,8 +169,8 @@ class Ui_MainWindow:
         ]
         
         for row, (label_text, attr_name) in enumerate(checkboxes):
-            label = QtWidgets.QLabel(label_text)
-            checkbox = QtWidgets.QCheckBox()
+            label = QLabel(label_text)
+            checkbox = QCheckBox()
             setattr(self, attr_name, checkbox)
             
             gridLayout.addWidget(label, row, 0)
@@ -180,7 +180,7 @@ class Ui_MainWindow:
 
     def create_auto_login_group(self, layout):
         """创建游戏启动和一键登录按钮区域"""
-        self.autoLoginGroup = QtWidgets.QGroupBox("自动化")
+        self.autoLoginGroup = QGroupBox("自动化")
         autoLoginLayout = QVBoxLayout(self.autoLoginGroup)
         # 按钮配置
         buttons = [
@@ -188,7 +188,7 @@ class Ui_MainWindow:
             ("一键登陆崩坏3", "oneClickLoginBtn")
         ]
         for btn_text, attr_name in buttons:
-            btn = QtWidgets.QPushButton(btn_text)
+            btn = QPushButton(btn_text)
             btn.setMinimumHeight(30)
             setattr(self, attr_name, btn)
             autoLoginLayout.addWidget(btn)
@@ -196,15 +196,15 @@ class Ui_MainWindow:
 
     def create_about_group(self, layout):
         """创建包含检查更新功能的'关于'组（简化版）"""
-        self.aboutGroup = QtWidgets.QGroupBox("关于")
-        gridLayout = QtWidgets.QGridLayout(self.aboutGroup)
+        self.aboutGroup = QGroupBox("关于")
+        gridLayout = QGridLayout(self.aboutGroup)
         
         # 只保留"检查更新"按钮
-        self.checkUpdateBtn = QtWidgets.QPushButton("检查更新")
+        self.checkUpdateBtn = QPushButton("检查更新")
         gridLayout.addWidget(self.checkUpdateBtn, 0, 0)
         
         # 更新状态标签
-        self.updateStatusLabel = QtWidgets.QLabel(f"当前版本：{version_manager.get_current_version()}")
+        self.updateStatusLabel = QLabel(f"当前版本：{version_manager.get_current_version()}")
         self.updateStatusLabel.setAlignment(Qt.AlignmentFlag.AlignCenter)
         gridLayout.addWidget(self.updateStatusLabel, 0, 1, 1, 2)  # 跨两列显示
         
@@ -225,7 +225,7 @@ class Ui_MainWindow:
 
     def retranslateUi(self, MainWindow):
         """设置窗口标题和初始化文本"""
-        _translate = QtCore.QCoreApplication.translate
+        _translate = QCoreApplication.translate
         MainWindow.setWindowTitle(_translate("MainWindow", "B服崩坏3扫码登陆器"))
         self.logText.setPlainText("系统初始化完成，等待操作...")
 

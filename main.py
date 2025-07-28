@@ -4,14 +4,12 @@ import sys
 import asyncio
 import subprocess
 import webbrowser
-import json
-import os  # 需要导入 os
 from threading import Thread
 from flask import Flask, abort, render_template, request
 import logging
 from PySide6.QtCore import QThread, Signal, QTimer
 from PySide6.QtGui import QIcon
-from PySide6.QtWidgets import QApplication, QMainWindow, QFileDialog, QMessageBox, QTextEdit, QWidget, QVBoxLayout # 添加 QTextEdit, QWidget, QVBoxLayout
+from PySide6.QtWidgets import QApplication, QMainWindow, QFileDialog, QMessageBox
 import bsgamesdk
 import mihoyosdk
 import mainWindow
