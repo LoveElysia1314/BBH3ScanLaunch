@@ -7,12 +7,7 @@ from pathlib import Path
 import site
 site.ENABLE_USER_SITE = False
 
-# 尝试导入 win32com（仅限 Windows）
-try:
-    from win32com.client import Dispatch
-    WIN_SHORTCUT_AVAILABLE = True
-except ImportError:
-    WIN_SHORTCUT_AVAILABLE = False
+
 
 from version_utils import version_manager
 version = version_manager.CURRENT_VERSION
@@ -51,11 +46,22 @@ def main():
     
     # 安装/更新依赖
     print("\n===== 安装/更新依赖 =====")
+    # 确定虚拟环境中pip的位置
+    pip_exe = venv_dir / ("Scripts" if sys.platform == "win32" else "bin") / "pip"
+    if sys.platform == "win32":
+        pip_exe = pip_exe.with_suffix(".exe")
+    
+    if not pip_exe.exists():
+        print(f"错误：未找到pip可执行文件: {pip_exe}")
+        sys.exit(1)
+    
     pip_cmd = [
-        sys.executable, "-m", "pip", "install",
+        str(pip_exe),
+        "install",
         "--upgrade", "pip",
         "-r", str(script_dir / "requirements.txt")
     ]
+    print(f"使用虚拟环境的pip: {pip_exe}")
     subprocess.run(pip_cmd, check=True)
     
     # 清理缓存
@@ -159,7 +165,19 @@ def run_pyinstaller(script_dir, venv_dir, output_dir, tmpdir):
     
     print("\n运行 PyInstaller 命令...")
     print(" ".join(cmd))
-    subprocess.run(cmd, check=True)
+    try:
+        # 捕获PyInstaller的完整输出
+        result = subprocess.run(cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        # 打印标准输出和错误（即使成功也打印，可能有警告信息）
+        if result.stdout:
+            print("PyInstaller 标准输出:\n", result.stdout)
+        if result.stderr:
+            print("PyInstaller 标准错误:\n", result.stderr)
+    except subprocess.CalledProcessError as e:
+        print(f"PyInstaller 命令执行失败，退出码: {e.returncode}")
+        print("标准输出:\n", e.stdout)
+        print("标准错误:\n", e.stderr)
+        raise  # 重新抛出异常以便上层处理
 
 def copy_resources(script_dir, app_dir):
     """复制所有资源文件"""
@@ -188,6 +206,14 @@ def copy_resources(script_dir, app_dir):
             shutil.copy2(src, dst)
 
 def create_windows_shortcuts(app_dir, exe_name):
+
+    # 尝试导入 win32com（仅限 Windows）
+    try:
+        from win32com.client import Dispatch
+        WIN_SHORTCUT_AVAILABLE = True
+    except ImportError:
+        WIN_SHORTCUT_AVAILABLE = False
+
     """创建Windows快捷方式"""
     if not WIN_SHORTCUT_AVAILABLE:
         print("警告：未安装 pywin32，跳过创建快捷方式")
