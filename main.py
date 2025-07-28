@@ -17,10 +17,11 @@ import mihoyosdk
 import mainWindow  # 假设这是包含更新后 Ui_MainWindow 的文件
 from bh3_utils import image_processor, is_game_window_exist, click_center_of_game_window
 from utils import EmittingStream
-from config_utils import ConfigManager
 
-# ========== 初始化配置管理器 ==========
-config_manager = ConfigManager()
+# ========== 初始化配置管理器和版本更新工具 ==========
+from network_utils import network_manager
+from config_utils import config_manager
+from version_utils import version_manager  # 导入版本管理器
 
 # ========== 登陆线程 ==========
 class LoginThread(QThread):
@@ -350,72 +351,29 @@ class SelfMainWindow(QMainWindow):
         """检查更新"""
         # 这里实现你的更新检查逻辑
         # 例如：访问一个API获取最新版本号，与当前版本比较
-        current_version = "v1.1" # 从UI或配置中获取
         ui.updateStatusLabel.setText("正在检查更新...")
-        # 模拟网络请求 (你需要替换为真实的请求)
-        # import requests
-        # try:
-        #     response = requests.get("https://your-update-api.com/version")
-        #     latest_version = response.json().get("version", "")
-        # except Exception as e:
-        #     print(f"检查更新失败: {e}")
-        #     ui.updateStatusLabel.setText("检查更新失败")
-        #     return
+        
+        check_result = network_manager.check_program_update()
 
-        # --- 模拟检查结果 ---
-        # import random
-        # is_newer_version = random.choice([True, False]) # 随机模拟是否有更新
-        # latest_version = "v1.2" if is_newer_version else current_version
+        latest_version = check_result.get('version')
 
-        # --- 简单的本地版本比较模拟 ---
-        # 假设你有一个 config.json 或其他地方存储了检查到的最新版本
-        # latest_version_info_path = "latest_version_info.json"
-        # latest_version = current_version
-        # if os.path.exists(latest_version_info_path):
-        #     try:
-        #         with open(latest_version_info_path, 'r') as f:
-        #             data = json.load(f)
-        #             latest_version = data.get("latest_version", current_version)
-        #     except:
-        #         pass
+        download_url = check_result.get('download_url')
 
-        # is_newer_version = latest_version > current_version # 简单字符串比较，适用于 v1.1, v1.2 格式
-
-        # --- 硬编码模拟结果 ---
-        # 为了演示，我们假设总是检查到最新版或总是有更新
-        # is_newer_version = False # 改为 True 测试有更新的情况
-        # latest_version = "v1.1" if not is_newer_version else "v1.2"
-
-        # --- 实际应用中，你应该有真实的检查逻辑 ---
-        # 例如，比较 current_version 和从服务器获取的 latest_version
-        # is_newer_version = self.is_version_newer(current_version, latest_version)
-
-        # --- 这里我们暂时只显示当前版本 ---
-        is_newer_version = False
-        latest_version = current_version
-
-        if is_newer_version:
+        if check_result.get('has_update'):
             ui.updateStatusLabel.setText(f"发现新版本: {latest_version}")
             # 可以弹出提示框询问是否下载
-            # from PySide6.QtWidgets import QMessageBox
-            # reply = QMessageBox.question(self, '更新', f'发现新版本 {latest_version}，是否前往下载？',
-            #                              QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
-            # if reply == QMessageBox.StandardButton.Yes:
-            #     webbrowser.open("https://your-download-url.com") # 替换为实际下载链接
+            from PySide6.QtWidgets import QMessageBox
+            reply = QMessageBox.question(self, '更新', f'发现新版本 {latest_version}，是否前往下载？',
+                                          QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+            if reply == QMessageBox.StandardButton.Yes:
+                 network_manager.download_update(download_url)
+
+        elif check_result.get('error'):
+            print(f"[WARNING] 检查更新失败，请访问GitHub项目主页。")
         else:
              # 如果是启动时检查，可能不显示 "已是最新版本" 以减少干扰
              # 可以通过传递一个标志位来区分，这里简化处理
-             ui.updateStatusLabel.setText("当前版本: v1.1") # 或 "已是最新版本"
-
-        print(f"[WARNING] 检查更新完成。当前版本: {current_version}, 最新版本: {latest_version}")
-
-    # def is_version_newer(self, current, latest):
-    #     # 实现版本号比较逻辑，例如 "v1.2" > "v1.1"
-    #     # 这可能需要使用 packaging.version 或自定义解析
-    #     # from packaging import version
-    #     # return version.parse(latest) > version.parse(current)
-    #     pass # 简化示例
-
+             ui.updateStatusLabel.setText(f"当前版本：{version_manager.get_current_version()}") # 或 "已是最新版本"
 
 # ========== Flask 启动 ==========
 if __name__ == '__main__':
@@ -428,7 +386,7 @@ if __name__ == '__main__':
     window = SelfMainWindow()
     ui = mainWindow.Ui_MainWindow() # 实例化 UI
     ui.setupUi(window) # 设置 UI 到窗口
-    # 连接信号流到print
+    # 连接信号流到print 
     stream.textWritten.connect(lambda text: ui.logText.append(text))
 
     # Flask 应用设置
