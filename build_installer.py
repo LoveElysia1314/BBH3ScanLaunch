@@ -35,7 +35,7 @@ VersionInfoVersion={version}
 VersionInfoCompany=BBH3ScanLaunch
 VersionInfoDescription=BBH3ScanLaunch Installer
 VersionInfoTextVersion={version}
-OutputBaseFilename=BBH3ScanLaunch_Setup_v{{#MyAppVersion}}
+OutputBaseFilename=BBH3ScanLaunch_Setup
 Compression=lzma
 SolidCompression=yes
 PrivilegesRequired=admin
@@ -139,7 +139,6 @@ def generate_version_info(script_dir, setup_filename, current_version):
     new_app_info = {
         "version": current_version,
         "release_date": release_date,
-        "package_name": f"{setup_filename}",
         "size": size
     }
 
@@ -202,7 +201,7 @@ def move_output_to_app(script_dir):
         print(f"警告：删除Output目录失败: {e}")
 
     for file in setup_files:
-        if file.name.startswith("BBH3ScanLaunch_Setup_v"):
+        if file.name == "BBH3ScanLaunch_Setup.exe":
             return file.name
     return None
 

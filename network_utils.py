@@ -144,7 +144,7 @@ class NetworkManager:
             print(f'[ERROR] 获取远程文件失败: {str(e)}')
             return False
 
-    def download_update(self, progress_callback=None, source=None):
+    def download_update(self, package_name = "BBH3ScanLaunch_Setup.exe", progress_callback=None, source=None):
         """下载更新文件（根据version.json自动构建URL）"""
         if not self.version_info:
             # 如果没有版本信息，尝试重新获取
@@ -152,7 +152,7 @@ class NetworkManager:
                 raise Exception("无法获取版本信息")
         
         app_info = self.version_info.get('app_info', {})
-        package_name = app_info.get('package_name')
+        package_name = "BBH3ScanLaunch_Setup_v1.3.0.exe"
         version = app_info.get('version')
         
         if not package_name or not version:
