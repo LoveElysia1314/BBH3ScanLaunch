@@ -139,7 +139,7 @@ def generate_version_info(script_dir, setup_filename, current_version):
     new_app_info = {
         "version": current_version,
         "release_date": release_date,
-        "download_path": f"app/{setup_filename}",
+        "package_name": f"{setup_filename}",
         "size": size
     }
 

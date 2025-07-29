@@ -16,7 +16,6 @@ import mihoyosdk
 import mainWindow
 from bh3_utils import image_processor, is_game_window_exist, click_center_of_game_window
 from utils import EmittingStream
-
 # ========== 初始化配置管理器和版本更新工具 ==========
 from network_utils import network_manager
 from config_utils import config_manager
@@ -306,38 +305,27 @@ class SelfMainWindow(QMainWindow):
             self.update_status_text(checkbox, prefix)
         print("[INFO] 一键登陆模式已结束，恢复原始设置")
 
-    def check_for_updates(self):
-        """检查更新"""
+    def check_and_display_updates(self):
+        """检查更新并更新UI标签（用于程序初始化）"""
         ui.updateStatusLabel.setText("正在检查更新...")
-        
-        # 获取远程文件
-        if not network_manager.fetch_remote_files():
-            ui.updateStatusLabel.setText("检查更新失败")
-            return
-        
-        # 检查是否有更新
-        if version_manager.has_update():
-            # 从本地version.json读取更新信息
-            try:
-                with open('updates/version.json', 'r', encoding='utf-8') as f:
-                    data = json.load(f)
-                    app_info = data.get('app_info', {})
-                    latest_version = app_info.get('version', '未知版本')
-                    download_url = app_info.get('download_path', '')
-            except Exception as e:
-                print(f'[ERROR] 读取版本信息失败: {e}')
-                ui.updateStatusLabel.setText("读取更新信息失败")
-                return
-            
-            ui.updateStatusLabel.setText(f"发现新版本: {latest_version}")
-            # 弹出提示框询问是否下载
-            from PySide6.QtWidgets import QMessageBox
+        has_update = version_manager.has_update()
+        if has_update:
+            latest_version = version_manager.REMOTE_VERSION
+            ui.updateStatusLabel.setText(f"更新可用: {latest_version}")
+        else:
+            current_version = version_manager.get_current_version()
+            ui.updateStatusLabel.setText(f"暂无更新：{current_version}")
+        return has_update
+
+    def check_for_updates(self):
+        """检查更新并弹窗询问（用户手动触发）"""
+        has_update = self.check_and_display_updates()
+        if has_update:
+            latest_version = version_manager.REMOTE_VERSION
             reply = QMessageBox.question(self, '更新', f'发现新版本 {latest_version}，是否前往下载？',
                                           QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
             if reply == QMessageBox.StandardButton.Yes:
-                network_manager.download_update(download_url)
-        else:
-            ui.updateStatusLabel.setText(f"当前版本：{version_manager.get_current_version()}")
+                network_manager.download_update()
 
 # ========== Flask 启动 ==========
 if __name__ == '__main__':
@@ -411,6 +399,9 @@ if __name__ == '__main__':
 
     # 显示窗口
     window.show()
+
+    # 程序启动时自动检查更新（不弹窗）
+    window.check_and_display_updates()
 
     # 处理命令行参数
     if '--auto-login' in sys.argv:
