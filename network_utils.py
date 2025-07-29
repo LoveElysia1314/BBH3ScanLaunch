@@ -4,229 +4,198 @@ import json
 import os
 import sys
 import tempfile
-from urllib.parse import urlparse
-import concurrent.futures
-import time
-from packaging import version
+from urllib.parse import urljoin
+from version_utils import version_manager
 
-from version_utils import version_manager  # 导入版本管理器
+class SourceManager:
+    """管理不同代码托管平台的源"""
+    def __init__(self):
+        # 只保留gitee和github源
+        self.sources = {
+            'gitee': {
+                'base_url': 'https://gitee.com/{username}/{repo}/raw/{branch}/',
+                'type': 'direct'
+            },
+            'github': {
+                'base_url': 'https://raw.githubusercontent.com/{username}/{repo}/{branch}/',
+                'type': 'direct'
+            }
+        }
+        # 默认源优先级列表
+        self.default_priority = ['gitee', 'github']
+
+    def get_source_urls(self, path, source_priority=None, username="LoveElysia1314", repo="BBH3ScanLaunch", branch="main"):
+        """根据优先级生成不同源的完整 URL"""
+        if source_priority is None:
+            source_priority = self.default_priority
+
+        urls = []
+        for source_name in source_priority:
+            if source_name in self.sources:
+                source_info = self.sources[source_name]
+                base_url = source_info['base_url'].format(username=username, repo=repo, branch=branch)
+                full_url = urljoin(base_url, path.lstrip('/'))
+                urls.append({'name': source_name, 'url': full_url, 'type': source_info['type']})
+        return urls
+
+    def normalize_source_input(self, source_input):
+        """标准化源输入，支持字符串或列表"""
+        if isinstance(source_input, str):
+            if source_input in ['gitee', 'github']:
+                return [source_input]
+            return self.default_priority
+        elif isinstance(source_input, list):
+            return [s for s in source_input if s in self.default_priority]
+        else:
+            return self.default_priority
 
 class NetworkManager:
     def __init__(self):
-        self.current_version = version_manager.get_current_version()
-        # CDN镜像源列表
-        self.cdn_mirrors = [
-            "https://cdn.jsdelivr.net",
-            "https://gcore.jsdelivr.net",
-            "https://fastly.jsdelivr.net",
-            "https://jsd.cdn.zzko.cn"
-        ]
+        self.source_manager = SourceManager()
 
-    def fetch_from_multiple_sources(self, base_url, timeout=5):
-        """
-        从多个CDN源并行获取数据，返回最快的成功响应
-        """
-        print(f'[INFO] 开始从多个源获取: {base_url}')
-        def fetch_single_source(mirror_url):
-            try:
-                start_time = time.time()
-                response = requests.get(
-                    mirror_url,
-                    timeout=timeout,
-                    headers={"User-Agent": "Mozilla/5.0"}
-                )
-                if response.status_code == 200:
-                    return {
-                        'url': mirror_url,
-                        'content': response.content,
-                        'text': response.text,
-                        'json': response.json() if response.headers.get('content-type', '').startswith('application/json') else None,
-                        'time': time.time() - start_time,
-                        'success': True,
-                        'status_code': response.status_code
-                    }
-            except Exception as e:
-                pass # 忽略单个源的错误
-            return {'url': mirror_url, 'success': False}
+    def fetch_from_source(self, url, timeout=5):
+        """从单个源获取数据"""
+        try:
+            response = requests.get(url, timeout=timeout, headers={"User-Agent": "Mozilla/5.0"})
+            if response.status_code == 200:
+                return {
+                    'content': response.content,
+                    'text': response.text,
+                    'json': response.json() if response.headers.get('content-type', '').startswith('application/json') else None,
+                    'success': True,
+                    'status_code': response.status_code
+                }
+        except Exception:
+            pass
+        return {'success': False}
 
-        # 构造所有镜像URL
-        mirror_urls = [f"{mirror}{urlparse(base_url).path}" for mirror in self.cdn_mirrors]
-        # 并行请求
-        with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
-            futures = [executor.submit(fetch_single_source, url) for url in mirror_urls]
-            results = []
-            # 处理完成的请求
-            for future in concurrent.futures.as_completed(futures):
-                result = future.result()
-                if not result['success']:
-                    continue
-                results.append(result)
-                # 返回第一个成功的响应（最快的）
-                if results: # 一旦有成功的就立即返回
-                    fastest = min(results, key=lambda x: x['time'])
-                    print(f'[INFO] 使用源: {fastest["url"]}, 耗时: {fastest["time"]:.2f}秒')
-                    return fastest
-        print('[WARNING] 所有源均无法访问')
-        return None
-
-    def get_oa_token(self):
+    def get_oa_token(self, source=None):
         """获取OA token和游戏版本"""
-        original_url = "https://cdn.jsdelivr.net/gh/LoveElysia1314/BBH3ScanLaunch@main/updates/oa_token.json"
-        result = self.fetch_from_multiple_sources(original_url)
-        if result and result['success']:
-            try:
-                if result['json']:
-                    data = result['json']
-                else:
-                    data = json.loads(result['text'])
-                oa_token = data.get("oa_token", "e257aaa274fb2239094cbe64d9f5ee3e")
-                bh_ver = data.get("bh_ver", "8.4.0")
-                print('[INFO] OA Token获取成功')
-                return oa_token, bh_ver
-            except Exception as e:
-                print(f'[WARNING] 解析OA Token失败: {e}')
-        print('[WARNING] 使用默认OA Token')
+        source_priority = self.source_manager.normalize_source_input(source)
+        urls_to_try = self.source_manager.get_source_urls("updates/version.json", source_priority)
+        
+        for source_info in urls_to_try:
+            result = self.fetch_from_source(source_info['url'])
+            if result and result['success']:
+                try:
+                    data = result['json'] or json.loads(result['text'])
+                    oa_info = data.get("oa_info", {})
+                    return (
+                        oa_info.get("oa_token", "e257aaa274fb2239094cbe64d9f5ee3e"),
+                        oa_info.get("bh_ver", "8.4.0")
+                    )
+                except Exception as e:
+                    print(f'[WARNING] 解析OA Token失败: {e}')
         return "e257aaa274fb2239094cbe64d9f5ee3e", "8.4.0"
 
-    def check_program_update(self):
-        """检查程序是否有新版本，并下载更新日志"""
+    def check_program_update(self, source=None):
+        """检查程序更新"""
         try:
-            # 1. 获取远程版本信息
-            version_url = "https://cdn.jsdelivr.net/gh/LoveElysia1314/BBH3ScanLaunch@main/updates/version.json"
-            version_result = self.fetch_from_multiple_sources(version_url, timeout=10)
+            source_priority = self.source_manager.normalize_source_input(source)
+            version_path = "updates/version.json"
+            urls_to_try = self.source_manager.get_source_urls(version_path, source_priority)
             
-            if not (version_result and version_result['success']):
-                 print(f'[ERROR] 检查更新失败，无法获取版本信息')
-                 return {"has_update": False, "error": "无法获取版本信息"}
-
-            try:
-                if version_result['json']:
-                    remote_data = version_result['json']
-                else:
-                    remote_data = json.loads(version_result['text'])
-            except json.JSONDecodeError as e:
-                 print(f'[ERROR] 检查更新失败，版本信息JSON解析错误: {e}')
-                 return {"has_update": False, "error": f"JSON解析错误: {e}"}
-
-            remote_version = remote_data.get("version", "0.0.0")
-            download_url = remote_data.get("download_url")
-            changelog_url = remote_data.get("changelog_url") # 新增：从 version.json 获取 changelog.md 的 URL
-            size = remote_data.get("size", "未知")
-            release_date = remote_data.get("release_date", "")
-
-            # 2. 比较版本号
-            if version.parse(remote_version) > version.parse(self.current_version):
-                print(f"[INFO] 发现新版本。当前版本: {self.current_version}, 最新版本: {remote_version}")
-                
-                changelog_content = "" # 初始化日志内容
-                # 3. 如果提供了 changelog_url，则尝试下载更新日志
-                if changelog_url:
-                    print(f"[INFO] 正在获取更新日志...")
-                    changelog_result = self.fetch_from_multiple_sources(changelog_url, timeout=30)
-                    if changelog_result and changelog_result['success']:
-                         changelog_content = changelog_result.get('text', '')
-                         print(f"[INFO] 更新日志获取成功。")
-                    else:
-                         print(f"[WARNING] 更新日志获取失败。")
-                         changelog_content = "[更新日志获取失败]"
-                else:
-                     print(f"[INFO] 版本信息中未提供更新日志URL。")
-                     changelog_content = "[无更新日志信息]"
-
-                return {
-                    "has_update": True,
-                    "version": remote_version,
-                    "download_url": download_url,
-                    "changelog": changelog_content, # 返回获取到的日志内容
-                    "size": size,
-                    "release_date": release_date
-                }
-            else:
-                print(f"[INFO] 检查更新完成。当前已是最新版本: {self.current_version}")
-                return {"has_update": False, "version": remote_version}
-                
+            for source_info in urls_to_try:
+                result = self.fetch_from_source(source_info['url'], timeout=10)
+                if result and result['success']:
+                    try:
+                        data = result['json'] or json.loads(result['text'])
+                        app_info = data.get("app_info", {})
+                        remote_version = app_info.get("version", "0.0.0")
+                        
+                        if remote_version > version_manager.get_current_version():
+                            return self._prepare_update_info(data, source_info)
+                        else:
+                            print(f"[INFO] 已是最新版本: {version_manager.get_current_version()}")
+                            return {"has_update": False, "version": remote_version}
+                    except Exception as e:
+                        print(f'[ERROR] 解析版本信息失败: {e}')
+            return {"has_update": False, "error": "所有源均无法访问"}
         except Exception as e:
-            print(f'[ERROR] 检查更新过程中发生未预期错误: {str(e)}')
+            print(f'[ERROR] 检查更新失败: {str(e)}')
             return {"has_update": False, "error": f"检查更新失败: {str(e)}"}
 
-    def download_update(self, download_url, progress_callback=None):
-        """下载更新文件（支持多源CDN）"""
+    def _prepare_update_info(self, remote_data, source_info):
+        """准备更新信息"""
+        app_info = remote_data.get("app_info", {})
+        sources_dict = remote_data.get("sources", {})
+        
+        # 构建下载URL
+        download_url = sources_dict.get("download_url", {}).get(source_info['name']) or app_info.get("download_path", "")
+        if download_url and not download_url.startswith(('http://', 'https://')):
+            base_url = '/'.join(source_info['url'].split('/')[:-1]) + '/'
+            download_url = urljoin(base_url, download_url.lstrip('/'))
+        
+        # 构建更新日志URL
+        changelog_url = sources_dict.get("changelog", {}).get(source_info['name']) or app_info.get("changelog_path", "")
+        if changelog_url and not changelog_url.startswith(('http://', 'https://')):
+            base_url = '/'.join(source_info['url'].split('/')[:-1]) + '/'
+            changelog_url = urljoin(base_url, changelog_url.lstrip('/'))
+        
+        # 获取更新日志内容
+        changelog_content = ""
+        if changelog_url:
+            changelog_result = self.fetch_from_source(changelog_url, timeout=30)
+            if changelog_result and changelog_result['success']:
+                changelog_content = changelog_result.get('text', '')
+        
+        return {
+            "has_update": True,
+            "version": app_info.get("version", "0.0.0"),
+            "download_url": download_url,
+            "changelog": changelog_content,
+            "size": app_info.get("size", "未知"),
+            "release_date": app_info.get("release_date", ""),
+            "used_source": source_info['name']
+        }
+
+    def download_update(self, download_url, progress_callback=None, source=None):
+        """下载更新文件"""
         try:
-            print(f'[INFO] 开始下载更新文件: {download_url}')
-            # 使用多源下载
-            result = self.fetch_from_multiple_sources(download_url, timeout=300)
-            if result and result['success']:
+            if download_url.startswith(('http://', 'https://')):
+                response = requests.get(download_url, stream=True, timeout=300)
+                response.raise_for_status()
+                
                 temp_dir = tempfile.gettempdir()
                 temp_file = os.path.join(temp_dir, "update_temp.exe")
-                # 保存文件
+                
+                total_size = int(response.headers.get('content-length', 0))
+                downloaded = 0
+                
                 with open(temp_file, 'wb') as f:
-                    f.write(result['content'])
-                print(f'[INFO] 文件下载完成: {temp_file}')
+                    for chunk in response.iter_content(chunk_size=8192):
+                        if chunk:
+                            f.write(chunk)
+                            downloaded += len(chunk)
+                            if progress_callback and total_size > 0:
+                                progress = (downloaded / total_size) * 100
+                                progress_callback(progress)
+                
                 return temp_file
             else:
-                raise Exception("所有CDN源都无法访问")
-        except Exception as e:
-            print(f'[ERROR] 下载更新失败: {str(e)}')
-            raise
-
-    def download_file_with_progress(self, download_url, progress_callback=None):
-        """带进度条的文件下载（用于大文件）"""
-        try:
-            temp_dir = tempfile.gettempdir()
-            temp_file = os.path.join(temp_dir, "update_temp.exe")
-            # 使用多源下载，但逐个尝试直到成功
-            for mirror in self.cdn_mirrors:
-                try:
-                    mirror_url = f"{mirror}{urlparse(download_url).path}"
-                    print(f'[INFO] 尝试下载源: {mirror_url}')
-                    response = requests.get(mirror_url, stream=True, timeout=300)
-                    response.raise_for_status()
-                    total_size = int(response.headers.get('content-length', 0))
-                    downloaded = 0
-                    with open(temp_file, 'wb') as f:
-                        for chunk in response.iter_content(chunk_size=8192):
-                            if chunk:
-                                f.write(chunk)
-                                downloaded += len(chunk)
-                                if progress_callback and total_size > 0:
-                                    progress = (downloaded / total_size) * 100
-                                    # 确保 progress_callback 被正确调用
-                                    if callable(progress_callback):
-                                        progress_callback(progress)
-                    print(f'[INFO] 文件下载完成: {temp_file}')
-                    return temp_file
-                except Exception as e:
-                    print(f'[WARNING] 源 {mirror} 下载失败: {e}')
-                    continue
-            raise Exception("所有CDN源都无法访问")
+                raise Exception("无效的下载URL")
         except Exception as e:
             print(f'[ERROR] 下载更新失败: {str(e)}')
             raise
 
     def install_update(self, new_file_path):
-        """安装更新（替换当前程序）"""
+        """安装更新"""
         try:
             current_exe = sys.executable
             current_dir = os.path.dirname(current_exe)
-            # 创建更新脚本
+            
             bat_content = f'''@echo off
-                cd /d "{current_dir}"
-                del "{current_exe}"
-                move "{new_file_path}" "{current_exe}"
-                start "" "{current_exe}"
-                exit
-            '''
-            # 写入临时bat文件
+cd /d "{current_dir}"
+del "{current_exe}"
+move "{new_file_path}" "{current_exe}"
+start "" "{current_exe}"
+exit
+'''
             bat_path = os.path.join(tempfile.gettempdir(), "update.bat")
             with open(bat_path, 'w') as f:
                 f.write(bat_content)
-            print(f"[INFO] 更新脚本已创建: {bat_path}")
-            # 执行更新脚本
-            # 使用 os.startfile 更安全地启动批处理文件
+                
             os.startfile(bat_path)
-            # 或者使用 subprocess.Popen (如果需要更精确的控制)
-            # subprocess.Popen([bat_path], shell=True, close_fds=True)
-            print("[INFO] 启动更新脚本，即将退出当前程序...")
             return True
         except Exception as e:
             print(f'[ERROR] 安装更新失败: {str(e)}')

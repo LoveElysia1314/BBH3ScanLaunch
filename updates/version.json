@@ -1,7 +1,23 @@
 {
-    "version": "1.2.5",
-    "release_date": "2025-07-29",
-    "download_url": "https://cdn.jsdelivr.net/gh/LoveElysia1314/BBH3ScanLaunch@main/app/BBH3ScanLaunch_Setup_v1.2.5.exe",
-    "changelog": "https://cdn.jsdelivr.net/gh/LoveElysia1314/BBH3ScanLaunch@main/updates/changelog.txt",
-    "size": "79MB"
+    "app_info": {
+        "version": "1.2.5",
+        "release_date": "2025-07-29",
+        "download_path": "app/BBH3ScanLaunch_Setup_v1.2.5.exe",
+        "changelog_path": "updates/changelog.txt",
+        "size": "79MB"
+    },
+    "oa_info": {
+        "oa_token": "e257aaa274fb2239094cbe64d9f5ee3e",
+        "bh_ver": "8.4.0"
+    },
+    "sources": {
+        "download_url": {
+            "gitee": "https://gitee.com/SomeOtherUser/BBH3ScanLaunch/releases/download/v1.2.5/BBH3ScanLaunch_Setup_v1.2.5.exe",
+            "github": "https://github.com/LoveElysia1314/BBH3ScanLaunch/releases/download/v1.2.5/BBH3ScanLaunch_Setup_v1.2.5.exe"
+        },
+        "changelog": {
+            "gitee": "https://gitee.com/LoveElysia1314/BBH3ScanLaunch/raw/main/docs/CHANGELOG.md",
+            "github": "https://raw.githubusercontent.com/LoveElysia1314/BBH3ScanLaunch/main/docs/CHANGELOG.md"
+        }
+    }
 }
