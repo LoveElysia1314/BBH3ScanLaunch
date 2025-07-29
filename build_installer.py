@@ -5,8 +5,9 @@ import shutil
 import json
 from datetime import datetime
 from pathlib import Path
-from version_utils import version_manager
 
+# 导入版本管理
+from version_utils import version_manager
 version = version_manager.CURRENT_VERSION
 
 # 定义黑名单文件
@@ -14,7 +15,7 @@ BLACKLIST_FILES = [
     "config.json"
 ]
 
-def generate_iss_file(script_dir, version):
+def generate_iss_file(script_dir, current_version):
     """动态生成 setup.iss 文件"""
     print("正在生成安装脚本...")
     
@@ -87,7 +88,7 @@ end;
 """
     
     # 格式化版本号
-    iss_content = iss_content_template.format(version=version)
+    iss_content = iss_content_template.format(version=current_version)
     
     iss_file = script_dir / "setup.iss"
     with open(iss_file, 'w', encoding='utf-8') as f:
@@ -125,8 +126,8 @@ def format_file_size(size_in_bytes):
     size_in_mb = size_in_bytes / (1024 * 1024)
     return f"{round(size_in_mb)}MB"
 
-def generate_version_info(script_dir, setup_filename):
-    """生成版本信息JSON"""
+def generate_version_info(script_dir, setup_filename, current_version):
+    """生成版本信息JSON - 只更新指定字段"""
     release_date = datetime.now().strftime("%Y-%m-%d")
     setup_path = script_dir / "app" / setup_filename
 
@@ -134,25 +135,46 @@ def generate_version_info(script_dir, setup_filename):
     if setup_path.exists():
         size = format_file_size(setup_path.stat().st_size)
 
-    download_url = f"https://cdn.jsdelivr.net/gh/LoveElysia1314/BBH3ScanLaunch@main/app/{setup_filename}"
-    changelog_url = "https://cdn.jsdelivr.net/gh/LoveElysia1314/BBH3ScanLaunch@main/updates/changelog.txt"
-
-    version_info = {
-        "version": version,
+    # 构建新的app_info数据
+    new_app_info = {
+        "version": current_version,
         "release_date": release_date,
-        "download_url": download_url,
-        "changelog": changelog_url,
+        "download_path": f"app/{setup_filename}",
         "size": size
     }
 
     updates_dir = script_dir / "updates"
     updates_dir.mkdir(exist_ok=True)
-
     version_file = updates_dir / "version.json"
-    with open(version_file, 'w', encoding='utf-8') as f:
-        json.dump(version_info, f, indent=4, ensure_ascii=False)
 
-    return version_info
+    # 如果version.json存在，读取现有内容并更新app_info部分
+    existing_data = {}
+    if version_file.exists():
+        try:
+            with open(version_file, 'r', encoding='utf-8') as f:
+                existing_data = json.load(f)
+        except (json.JSONDecodeError, Exception) as e:
+            print(f"警告：读取现有version.json失败，将创建新文件: {e}")
+            existing_data = {}
+
+    # 更新app_info部分，保持其他字段不变
+    if "app_info" in existing_data:
+        # 保留原有的app_info中除指定字段外的其他字段
+        for key, value in new_app_info.items():
+            existing_data["app_info"][key] = value
+    else:
+        # 如果没有app_info，创建新的
+        existing_data["app_info"] = new_app_info
+
+    # 写入更新后的数据
+    try:
+        with open(version_file, 'w', encoding='utf-8') as f:
+            json.dump(existing_data, f, indent=4, ensure_ascii=False)
+        print(f"版本信息已更新到: {version_file}")
+    except Exception as e:
+        print(f"错误：写入version.json失败: {e}")
+
+    return existing_data
 
 def move_output_to_app(script_dir):
     """将Output文件夹中的文件移动到app文件夹"""
@@ -160,6 +182,7 @@ def move_output_to_app(script_dir):
     app_dir = script_dir / "app"
 
     if not output_dir.exists():
+        print("警告：Output目录不存在")
         return None
 
     app_dir.mkdir(exist_ok=True)
@@ -175,8 +198,8 @@ def move_output_to_app(script_dir):
 
     try:
         shutil.rmtree(output_dir)
-    except Exception:
-        pass
+    except Exception as e:
+        print(f"警告：删除Output目录失败: {e}")
 
     for file in setup_files:
         if file.name.startswith("BBH3ScanLaunch_Setup_v"):
@@ -208,10 +231,15 @@ def find_inno_compiler():
 def build_installer():
     """构建安装包"""
     script_dir = Path(__file__).parent.resolve()
+    print(f"脚本目录: {script_dir}")
 
     if not check_required_files(script_dir):
         print("错误：缺少必要文件")
         return False
+
+    # 获取当前版本号
+    current_version = version
+    print(f"当前版本: {current_version}")
 
     app_dir = script_dir / "dist" / "BBH3ScanLaunch"
 
@@ -219,8 +247,9 @@ def build_installer():
     if not inno_compiler:
         print("错误：未找到 Inno Setup 编译器")
         return False
+    print(f"找到编译器: {inno_compiler}")
 
-    iss_file = generate_iss_file(script_dir, version)
+    iss_file = generate_iss_file(script_dir, current_version)
 
     try:
         output_dir = script_dir / "Output"
@@ -235,18 +264,24 @@ def build_installer():
             cwd=script_dir,
             encoding='utf-8'
         )
+        print("编译完成")
 
         try:
             iss_file.unlink()
-        except Exception:
-            pass
+            print("临时ISS文件已删除")
+        except Exception as e:
+            print(f"警告：删除临时ISS文件失败: {e}")
 
         setup_filename = move_output_to_app(script_dir)
+        print(f"安装包文件名: {setup_filename}")
 
         if setup_filename:
-            version_info = generate_version_info(script_dir, setup_filename)
-            print(f"安装包版本: {version_info['version']}")
-            print(f"安装包大小: {version_info['size']}")
+            version_info = generate_version_info(script_dir, setup_filename, current_version)
+            if "app_info" in version_info:
+                print(f"安装包版本: {version_info['app_info']['version']}")
+                print(f"安装包大小: {version_info['app_info']['size']}")
+            else:
+                print("版本信息生成完成")
 
         return True
 
@@ -255,6 +290,8 @@ def build_installer():
         return False
     except Exception as e:
         print(f"发生错误: {str(e)}")
+        import traceback
+        traceback.print_exc()
         return False
 
 def main():

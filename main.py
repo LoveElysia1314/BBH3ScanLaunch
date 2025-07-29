@@ -4,6 +4,7 @@ import sys
 import asyncio
 import subprocess
 import webbrowser
+import json  # 补充导入
 from threading import Thread
 from flask import Flask, abort, render_template, request
 import logging
@@ -307,31 +308,36 @@ class SelfMainWindow(QMainWindow):
 
     def check_for_updates(self):
         """检查更新"""
-        # 这里实现你的更新检查逻辑
-        # 例如：访问一个API获取最新版本号，与当前版本比较
         ui.updateStatusLabel.setText("正在检查更新...")
         
-        check_result = network_manager.check_program_update()
-
-        latest_version = check_result.get('version')
-
-        download_url = check_result.get('download_url')
-
-        if check_result.get('has_update'):
+        # 获取远程文件
+        if not network_manager.fetch_remote_files():
+            ui.updateStatusLabel.setText("检查更新失败")
+            return
+        
+        # 检查是否有更新
+        if version_manager.has_update():
+            # 从本地version.json读取更新信息
+            try:
+                with open('updates/version.json', 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+                    app_info = data.get('app_info', {})
+                    latest_version = app_info.get('version', '未知版本')
+                    download_url = app_info.get('download_path', '')
+            except Exception as e:
+                print(f'[ERROR] 读取版本信息失败: {e}')
+                ui.updateStatusLabel.setText("读取更新信息失败")
+                return
+            
             ui.updateStatusLabel.setText(f"发现新版本: {latest_version}")
-            # 可以弹出提示框询问是否下载
+            # 弹出提示框询问是否下载
             from PySide6.QtWidgets import QMessageBox
             reply = QMessageBox.question(self, '更新', f'发现新版本 {latest_version}，是否前往下载？',
                                           QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
             if reply == QMessageBox.StandardButton.Yes:
-                 network_manager.download_update(download_url)
-
-        elif check_result.get('error'):
-            print(f"[WARNING] 检查更新失败，请访问GitHub项目主页。")
+                network_manager.download_update(download_url)
         else:
-             # 如果是启动时检查，可能不显示 "已是最新版本" 以减少干扰
-             # 可以通过传递一个标志位来区分，这里简化处理
-             ui.updateStatusLabel.setText(f"当前版本：{version_manager.get_current_version()}") # 或 "已是最新版本"
+            ui.updateStatusLabel.setText(f"当前版本：{version_manager.get_current_version()}")
 
 # ========== Flask 启动 ==========
 if __name__ == '__main__':
