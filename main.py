@@ -325,7 +325,7 @@ class SelfMainWindow(QMainWindow):
             reply = QMessageBox.question(self, '更新', f'发现新版本 {latest_version}，是否前往下载？',
                                           QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
             if reply == QMessageBox.StandardButton.Yes:
-                network_manager.download_update()
+                network_manager.open_browser_for_download(source='gitee')
 
 # ========== Flask 启动 ==========
 if __name__ == '__main__':

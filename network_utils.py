@@ -1,7 +1,7 @@
 # network_utils.py
 import requests
 import os
-import tempfile
+import webbrowser
 import json
 from urllib.parse import urljoin
 
@@ -80,7 +80,6 @@ class SourceManager:
 class NetworkManager:
     def __init__(self):
         self.source_manager = SourceManager()
-        self.cache = {}  # 缓存下载的文件内容
         self.version_info = None  # 存储版本信息
         
         # 创建实例时自动获取远程文件
@@ -92,9 +91,7 @@ class NetworkManager:
             response = requests.get(url, timeout=timeout, headers={"User-Agent": "Mozilla/5.0"})
             if response.status_code == 200:
                 return {
-                    'content': response.content,
-                    'text': response.text,
-                    'json': response.json() if response.headers.get('content-type', '').startswith('application/json') else None,
+                    'text': response.text,  # 只保留实际使用的字段
                     'success': True,
                     'status_code': response.status_code
                 }
@@ -125,7 +122,6 @@ class NetworkManager:
             for source_info in version_urls:
                 result = self.fetch_from_source(source_info['url'], timeout=10)
                 if result and result['success']:
-                    self.cache['version.json'] = result['text']
                     self.version_info = json.loads(result['text'])  # 解析并存储版本信息
                     self.save_to_local(result['text'], "updates/version.json")
                     break
@@ -135,7 +131,6 @@ class NetworkManager:
             for source_info in changelog_urls:
                 result = self.fetch_from_source(source_info['url'], timeout=10)
                 if result and result['success']:
-                    self.cache['changelog.txt'] = result['text']
                     self.save_to_local(result['text'], "updates/changelog.txt")
                     break
             
@@ -144,75 +139,65 @@ class NetworkManager:
             print(f'[ERROR] 获取远程文件失败: {str(e)}')
             return False
 
-    def download_update(self, package_name = "BBH3ScanLaunch_Setup.exe", progress_callback=None, source=None):
-        """下载更新文件（根据version.json自动构建URL）"""
+    def open_browser_for_download(self, package_name="BBH3ScanLaunch_Setup.exe", source=None):
+        """
+        使用浏览器打开指定源的下载链接
+        
+        参数:
+            package_name: 要下载的文件名
+            source: 指定的下载源名称（必须提供）
+        
+        工作流程:
+            1. 验证必须指定下载源
+            2. 获取版本信息（包含自定义源配置）
+            3. 检查是否为自定义源（在version.json中定义）
+            4. 如果是自定义源，直接获取对应的URL
+            5. 如果是平台源（gitee/github），生成对应的发布URL
+            6. 使用浏览器打开下载链接
+        
+        异常:
+            如果没有找到有效的下载源，抛出异常
+        """
+        # 1. 验证必须指定下载源
+        if source is None:
+            raise ValueError("必须指定下载源（source参数不能为None）")
+        
+        # 2. 获取版本信息
         if not self.version_info:
-            # 如果没有版本信息，尝试重新获取
             if not self.fetch_remote_files():
                 raise Exception("无法获取版本信息")
         
-        app_info = self.version_info.get('app_info', {})
-        package_name = "BBH3ScanLaunch_Setup_v1.3.0.exe"
-        version = app_info.get('version')
-        
-        if not package_name or not version:
-            raise Exception("版本信息中缺少必要字段")
-        
-        # 获取自定义源配置
+        # 3. 检查是否为自定义源
         custom_sources = self.version_info.get('sources', {}).get('download_url', {})
         
-        # 生成标签（v+版本号）
-        # tag = f"v{version}" if not version.startswith('v') else version
+        if source in custom_sources:
+            # 4. 直接使用自定义源URL（不需要格式化）
+            download_url = custom_sources[source]
+            print(f"[INFO] 使用自定义源 '{source}': {download_url}")
+        else:
+            # 5. 生成平台源的发布URL
+            download_urls = self.source_manager.get_release_urls(
+                filename=package_name,
+                tag="latest",
+                source_priority=[source],  # 单个源
+                custom_sources=None  # 不包含自定义源
+            )
+            
+            if not download_urls:
+                raise Exception(f"找不到有效的下载源: '{source}'")
+            
+            # 取第一个匹配的URL
+            download_url = download_urls[0]['url']
+            print(f"[INFO] 使用平台源 '{source}': {download_url}")
         
-        # 使用最新版本teg
-        tag = f"latest"
-        # 获取下载URL列表
-        source_priority = self.source_manager.normalize_source_input(source)
-        download_urls = self.source_manager.get_release_urls(
-            filename=package_name,
-            tag=tag,
-            source_priority=source_priority,
-            custom_sources=custom_sources
-        )
-        
-        # 尝试所有URL直到成功
-        temp_file = None
-        last_error = None
-        
-        for source_info in download_urls:
-            try:
-                print(f"[INFO] 尝试从 {source_info['name']} 下载更新...")
-                response = requests.get(source_info['url'], stream=True, timeout=300)
-                response.raise_for_status()
-                
-                temp_dir = tempfile.gettempdir()
-                temp_file = os.path.join(temp_dir, "update_temp.exe")
-                
-                total_size = int(response.headers.get('content-length', 0))
-                downloaded = 0
-                
-                with open(temp_file, 'wb') as f:
-                    for chunk in response.iter_content(chunk_size=8192):
-                        if chunk:
-                            f.write(chunk)
-                            downloaded += len(chunk)
-                            if progress_callback and total_size > 0:
-                                progress = (downloaded / total_size) * 100
-                                progress_callback(progress)
-                
-                print(f"[SUCCESS] 从 {source_info['name']} 下载成功")
-                return temp_file
-                
-            except Exception as e:
-                last_error = e
-                print(f"[WARNING] 从 {source_info['name']} 下载失败: {str(e)}")
-                continue
-        
-        # 所有源都失败
-        error_msg = "所有下载源均失败"
-        if last_error:
-            error_msg += f"，最后错误: {str(last_error)}"
-        raise Exception(error_msg)
+        # 6. 使用浏览器打开下载链接
+        print(f"[INFO] 正在打开浏览器下载: {download_url}")
+        try:
+            webbrowser.open(download_url)
+            return True
+        except Exception as e:
+            print(f"[ERROR] 无法打开浏览器: {str(e)}")
+            return False
 
 # 全局网络管理实例
 network_manager = NetworkManager()
