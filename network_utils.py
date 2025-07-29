@@ -71,7 +71,7 @@ class NetworkManager:
 
     def get_oa_token(self):
         """获取OA token和游戏版本"""
-        original_url = "https://cdn.jsdelivr.net/gh/LoveElysia1314/BBH3ScanLaunch@main/oa_token.json"
+        original_url = "https://cdn.jsdelivr.net/gh/LoveElysia1314/BBH3ScanLaunch@main/updates/oa_token.json"
         result = self.fetch_from_multiple_sources(original_url)
         if result and result['success']:
             try:

@@ -1,7 +1,6 @@
 import base64
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import padding
-from cryptography.hazmat.primitives import hashes
 
 def rsacreate(message, public_key):
     """使用RSA公钥加密消息（PKCS#1 v1.5填充）"""

@@ -27,7 +27,7 @@ class ConfigManager:
     def __init__(self):
         self.lock = threading.Lock()
         self.m_cast_group_ip = '239.0.1.255'
-        self.oa_token_path = './oa_token.json'
+        self.oa_token_path = r'updates\oa_token.json'
         self.m_cast_group_port = 12585
         self.bh_info = {}
         self.data = {}
@@ -116,7 +116,7 @@ class ConfigManager:
         """下载oa_token.json文件"""
         try:
             # 使用网络管理器的并行下载功能
-            oa_token, bh_ver = network_manager.get_oa_token_parallel()
+            oa_token, bh_ver = network_manager.get_oa_token()
             
             # 更新实例变量
             self.oa_token = oa_token
