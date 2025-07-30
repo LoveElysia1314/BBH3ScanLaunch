@@ -22,7 +22,7 @@ from config_utils import config_manager
 from version_utils import version_manager  # 导入版本管理器
 
 # ========== 登陆线程 ==========
-class LoginThread(QThread):
+class LoginThread(QThread):  
     update_log = Signal(str)
     login_complete = Signal(bool) # 登录完成信号，传递成功/失败状态
 
@@ -120,6 +120,7 @@ class LoginThread(QThread):
 class ParseThread(QThread):
     update_log = Signal(str)
     exit_app = Signal()
+    should_stop = False  # 新增：控制线程停止的标志
 
     def is_admin(self):
         """使用Windows API检查管理员权限"""
@@ -128,54 +129,66 @@ class ParseThread(QThread):
         except:
             return False
 
-    async def check(self):
-        while True:
-            config = config_manager.config
-            if config['auto_click']:
-                if not self.is_admin():
-                    print("[INFO] 没有管理员权限，跳过图形识别和点击")
-                elif is_game_window_exist():
-                    image_processor.match_and_click()
-                else:
-                    #print("[DEBUG] 崩坏3窗口不存在，跳过图像识别和点击")
-                    pass
-            if config['auto_clip']:
-                try:
-                    if not is_game_window_exist():
-                        #print("[DEBUG] 崩坏3窗口不存在，跳过自动截屏")
-                        await asyncio.sleep(config['sleep_time'])
-                        continue
-                    screenshot = image_processor.capture_screen()
-                    if screenshot is None:
-                        await asyncio.sleep(config['sleep_time'])
-                        continue
-                    qr_parsed = await image_processor.parse_qr_code(
-                        image_source='game_window',
+    async def periodic_check(self):
+        """定期执行检查任务"""
+        while not self.should_stop:
+            try:
+                # 每次循环都获取最新的配置
+                config = config_manager.config
+                
+                # 处理自动点击
+                if config['auto_click']:
+                    if not self.is_admin():
+                        # 管理员权限检查只打印一次警告
+                        if not hasattr(self, 'admin_warning_printed'):
+                            print("[INFO] 没有管理员权限，跳过图形识别和点击")
+                            self.admin_warning_printed = True
+                    elif is_game_window_exist():
+                        image_processor.match_and_click()
+                
+                # 处理自动截屏
+                if config['auto_clip']:
+                    if is_game_window_exist():
+                        screenshot = image_processor.capture_screen()
+                        if screenshot:
+                            qr_parsed = await image_processor.parse_qr_code(
+                                image_source='game_window',
+                                config=config,
+                                bh_info=config_manager.bh_info
+                            )
+                            if qr_parsed:
+                                if config['auto_click']:
+                                    print('[INFO] 扫码成功，4秒后将自动点击窗口中心')
+                                    await asyncio.sleep(4)
+                                    click_center_of_game_window()
+                                if config['auto_close']:
+                                    print('[INFO] 已启用自动退出，2秒后将关闭扫码器')
+                                    await asyncio.sleep(2)
+                                    self.exit_app.emit()
+                                    return
+                
+                # 处理剪贴板检查
+                if config['clip_check'] and config.get('account_login', False):
+                    await image_processor.parse_qr_code(
+                        image_source='clipboard',
                         config=config,
                         bh_info=config_manager.bh_info
                     )
-                    if qr_parsed:
-                        if config['auto_click']:
-                            print('[INFO] 扫码成功，4秒后将自动点击窗口中心')
-                            await asyncio.sleep(4)
-                            click_center_of_game_window()
-                        if config['auto_close']:
-                            print('[INFO] 已启用自动退出，2秒后将关闭扫码器')
-                            await asyncio.sleep(2)
-                            self.exit_app.emit()
-                            return
-                except Exception as e:
-                    print(f"[ERROR] 自动截屏时出错: {str(e)}")
-            if config['clip_check'] and config.get('account_login', False):
-                await image_processor.parse_qr_code(
-                    image_source='clipboard',
-                    config=config,
-                    bh_info=config_manager.bh_info
-                )
-            await asyncio.sleep(config['sleep_time'])
+                
+                # 根据配置的间隔时间等待
+                await asyncio.sleep(config['sleep_time'])
+                
+            except Exception as e:
+                print(f"[ERROR] 检查过程中发生错误: {str(e)}")
+                # 短暂等待后继续，避免频繁报错
+                await asyncio.sleep(1)
+
+    def stop(self):
+        """停止线程"""
+        self.should_stop = True
 
     def run(self):
-        asyncio.run(self.check())
+        asyncio.run(self.periodic_check())
 
 # ========== 登陆按钮点击回调 ==========
 def login_accept():
