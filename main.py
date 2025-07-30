@@ -4,7 +4,6 @@ import sys
 import asyncio
 import subprocess
 import webbrowser
-import json  # 补充导入
 from threading import Thread
 from flask import Flask, abort, render_template, request
 import logging
@@ -19,7 +18,10 @@ from utils import EmittingStream
 # ========== 初始化配置管理器和版本更新工具 ==========
 from network_utils import network_manager
 from config_utils import config_manager
-from version_utils import version_manager  # 导入版本管理器
+from version_utils import version_manager  # 导入版本管理器和版本变量
+
+BH_VER = version_manager.get_version_info("bh_ver") # 当前崩坏三版本
+OA_TOKEN = version_manager.get_version_info("oa_token") # 当前oa_token
 
 # ========== 登陆线程 ==========
 class LoginThread(QThread):  
@@ -65,34 +67,22 @@ class LoginThread(QThread):
                 return
             print("[INFO] 登陆成功！获取OA服务器信息中...")
             # 获取服务器版本号
-            server_bh_ver = await mihoyosdk.getBHVer(config_manager.bh_ver)
+            server_bh_ver = await mihoyosdk.getBHVer(BH_VER)
             # 检查版本是否匹配
-            if server_bh_ver != config_manager.bh_ver:
-                print(f"[INFO] 版本不匹配 (本地: {config_manager.bh_ver}, 服务器: {server_bh_ver})，更新oa_token.json...")
-                if config_manager.download_oa_token():
-                    # 重新加载oa_token
-                    config_manager.oa_token, config_manager.bh_ver = config_manager._load_oa_token()
-                    print(f"[INFO] 已更新oa_token.json (新版本: {config_manager.bh_ver})")
-                else:
-                    print("[WARNING] oa_token.json更新失败，使用现有版本")
-            print(f"[INFO] 当前崩坏3版本: {config_manager.bh_ver}")
-            # 使用更新后的oa_token
-            oa = await mihoyosdk.getOAServer(config_manager.oa_token)
+            if server_bh_ver != BH_VER:
+                print(f"[INFO] 版本不匹配 (本地: {BH_VER}, 服务器: {server_bh_ver})！")
+            print(f"[INFO] 当前崩坏3版本: {server_bh_ver}")
+            oa = await mihoyosdk.getOAServer(OA_TOKEN) 
             if len(oa) < 100:
                 print("[INFO] 获取OA服务器失败！请检查Token后重试")
                 self.login_complete.emit(False)
                 return
             print("[INFO] 获取OA服务器成功！")
-            # UI更新移动到信号连接的槽函数中
-            # ui.loginBiliBtn.setText("账号已登陆")
             config['account_login'] = True
             config_manager.write_conf(config)
             self.login_complete.emit(True)
         except Exception as e:
             print(f"[ERROR] 登陆过程中发生错误: {str(e)}")
-            # UI更新移动到信号连接的槽函数中
-            # ui.loginBiliBtn.setText("登陆失败")
-            # ui.loginBiliBtn.setDisabled(False)
             self.login_complete.emit(False) # 异常时也发出信号
 
     def handle_login_failure(self, bs_info):
@@ -108,10 +98,6 @@ class LoginThread(QThread):
             webbrowser.open_new(bs_info['cap_url'])
         else:
             print(f"[INFO] 登陆失败！{bs_info}")
-        # UI更新移动到信号连接的槽函数中
-        # ui.loginBiliBtn.setText("登陆账号")
-        # ui.loginBiliBtn.setDisabled(False)
-        # 注意：这里不再 emit False，因为 login() 函数中已经 emit 了
 
     def run(self):
         asyncio.run(self.login())
@@ -323,10 +309,10 @@ class SelfMainWindow(QMainWindow):
         ui.updateStatusLabel.setText("正在检查更新...")
         has_update = version_manager.has_update()
         if has_update:
-            latest_version = version_manager.REMOTE_VERSION
+            latest_version = version_manager.get_version_info('remote')
             ui.updateStatusLabel.setText(f"更新可用: {latest_version}")
         else:
-            current_version = version_manager.get_current_version()
+            current_version = version_manager.get_version_info('current')
             ui.updateStatusLabel.setText(f"暂无更新：{current_version}")
         return has_update
 
@@ -334,7 +320,7 @@ class SelfMainWindow(QMainWindow):
         """检查更新并弹窗询问（用户手动触发）"""
         has_update = self.check_and_display_updates()
         if has_update:
-            latest_version = version_manager.REMOTE_VERSION
+            latest_version = version_manager.get_version_info('remote')
             reply = QMessageBox.question(self, '更新', f'发现新版本 {latest_version}，是否前往下载？',
                                           QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
             if reply == QMessageBox.StandardButton.Yes:

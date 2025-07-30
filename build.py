@@ -8,7 +8,7 @@ import site
 site.ENABLE_USER_SITE = False
 
 from version_utils import version_manager
-version = version_manager.CURRENT_VERSION
+version = version_manager.get_version_info('current')
 
 import build_installer
 

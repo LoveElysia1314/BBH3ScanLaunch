@@ -29,31 +29,14 @@ class ConfigManager:
     def __init__(self):
         self.lock = threading.Lock()
         self.m_cast_group_ip = '239.0.1.255'
-        # oa_token.json 已被合并，不再需要此路径
-        # self.oa_token_path = r'updates\oa_token.json' 
         self.m_cast_group_port = 12585
         self.bh_info = {}
         self.data = {}
         self.cap = None
         # 从权威源获取版本
-        self.current_version = version_manager.get_current_version()
-        
-        # 初始化时，从网络获取最新的 oa_token 和 bh_ver
-        # 不再需要 _ensure_oa_token_file 和 _load_oa_token
-        self.oa_token, self.bh_ver = self._fetch_oa_info()
+        self.current_version = version_manager.get_version_info('current')
         
         self.config = self._load_config()
-
-    def _fetch_oa_info(self, source=None):
-        """从网络获取最新的 oa_token 和 bh_ver"""
-        try:
-            # 调用修改后的网络管理器方法
-            oa_token, bh_ver = network_manager.get_oa_token(source=source)
-            print(f'[INFO] 成功获取 OA 信息: Token={oa_token[:8]}..., BH Ver={bh_ver}')
-            return oa_token, bh_ver
-        except Exception as e:
-            print(f'[WARNING] 从网络获取 OA 信息失败: {e}，使用默认值')
-            return "e257aaa274fb2239094cbe64d9f5ee3e", "8.4.0"
 
     def _load_config(self):
         """加载配置文件"""
@@ -106,13 +89,16 @@ class ConfigManager:
                 json.dump(config_temp, f, indent=4, separators=(',', ': '))
             self.config = config_temp
 
-    # --- 已废弃或修改的方法 ---
-    # def _ensure_oa_token_file(self): ...
-    # def _load_oa_token(self): ...
-    # def download_oa_token(self): ...
-    # --------------------------
 
-    # --- 新增或修改的方法 ---
+    def get_config(self, key, default=None):
+        """从当前类获取配置文件"""
+        return self.config.get(key, default)
+    
+    
+    def set_config(self, key, value):
+        """临时修改某项配置文件"""
+        self.config[key] = value
+        self.write_conf(self.config)
     
     def refresh_oa_info(self, source=None):
         """
@@ -147,10 +133,6 @@ class ConfigManager:
         elif update_info.get("has_update"):
              print("[WARNING] 更新信息中缺少 download_url")
         return None
-    
-    def install_program_update(self, new_file_path):
-        """安装程序更新"""
-        return network_manager.install_update(new_file_path)
     
     # program_version 相关方法可以保留，但逻辑可能需要调整
     # 如果版本信息完全由 network_utils 管理，这些可能变得不那么重要

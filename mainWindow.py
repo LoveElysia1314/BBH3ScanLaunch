@@ -204,7 +204,7 @@ class Ui_MainWindow:
         gridLayout.addWidget(self.checkUpdateBtn, 0, 0)
         
         # 更新状态标签
-        self.updateStatusLabel = QLabel(f"当前版本：{version_manager.get_current_version()}")
+        self.updateStatusLabel = QLabel(f"当前版本：{version_manager.get_version_info('current')}")
         self.updateStatusLabel.setAlignment(Qt.AlignmentFlag.AlignCenter)
         gridLayout.addWidget(self.updateStatusLabel, 0, 1, 1, 2)  # 跨两列显示
         
