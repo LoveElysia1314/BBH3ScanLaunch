@@ -1,8 +1,7 @@
 {
     "app_info": {
-        "version": "1.3.0",
-        "release_date": "2025-07-29",
-        "download_path": "app/BBH3ScanLaunch_Setup_v1.3.0.exe",
+        "version": "1.3.1",
+        "release_date": "2025-09-11",
         "changelog_path": "updates/changelog.txt",
         "size": "79MB"
     },
@@ -12,12 +11,12 @@
     },
     "sources": {
         "download_url": {
-            "yoursources1": "https://url/BBH3ScanLaunch_Setup_vx.x.x.exe",
-            "yoursources2": "https://url/BBH3ScanLaunch_Setup_vx.x.x.exe"
+            "gitee": "https://gitee.com/LoveElysia1314/BBH3ScanLaunch/releases/download/v1.3.1/BBH3ScanLaunch_Setup.exe",
+            "github": "https://github.com/LoveElysia1314/BBH3ScanLaunch/releases/download/v1.3.1/BBH3ScanLaunch_Setup.exe"
         },
         "changelog": {
-            "yoursources1": "https://url/changelog.txt",
-            "yoursources2": "https://url/changelog.txt"
+            "gitee": "https://gitee.com/LoveElysia1314/BBH3ScanLaunch/raw/latest/updates/changelog.txt",
+            "github": "https://github.com/LoveElysia1314/BBH3ScanLaunch/raw/latest/updates/changelog.txt"
         }
     }
 }

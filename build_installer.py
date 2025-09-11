@@ -8,17 +8,17 @@ from pathlib import Path
 
 # 导入版本管理
 from version_utils import version_manager
+
 version = version_manager.CURRENT_VERSION
 
 # 定义黑名单文件
-BLACKLIST_FILES = [
-    "config.json"
-]
+BLACKLIST_FILES = ["config.json"]
+
 
 def generate_iss_file(script_dir, current_version):
     """动态生成 setup.iss 文件"""
     print("正在生成安装脚本...")
-    
+
     # 使用普通字符串，然后通过替换来避免转义警告
     iss_content_template = """; BBH3ScanLaunch 安装包脚本
 #define MyAppName "BBH3ScanLaunch"
@@ -35,7 +35,7 @@ VersionInfoVersion={version}
 VersionInfoCompany=BBH3ScanLaunch
 VersionInfoDescription=BBH3ScanLaunch Installer
 VersionInfoTextVersion={version}
-OutputBaseFilename=BBH3ScanLaunch_Setup_v{{#MyAppVersion}}
+OutputBaseFilename=BBH3ScanLaunch_Setup
 Compression=lzma
 SolidCompression=yes
 PrivilegesRequired=admin
@@ -86,14 +86,15 @@ begin
   end;
 end;
 """
-    
+
     # 格式化版本号
     iss_content = iss_content_template.format(version=current_version)
-    
+
     iss_file = script_dir / "setup.iss"
-    with open(iss_file, 'w', encoding='utf-8') as f:
+    with open(iss_file, "w", encoding="utf-8") as f:
         f.write(iss_content)
     return iss_file
+
 
 def check_required_files(script_dir):
     """检查必要的文件是否存在"""
@@ -105,13 +106,14 @@ def check_required_files(script_dir):
         app_dir / "Pictures_to_Match",
         app_dir / "templates",
     ]
-    
+
     missing_files = []
     for path in required_paths:
         if not path.exists():
             missing_files.append(path)
-    
+
     return len(missing_files) == 0
+
 
 def check_blacklist_files(app_dir):
     """检查黑名单文件"""
@@ -121,10 +123,12 @@ def check_blacklist_files(app_dir):
             return True
     return False
 
+
 def format_file_size(size_in_bytes):
     """格式化文件大小为MB字符串"""
     size_in_mb = size_in_bytes / (1024 * 1024)
     return f"{round(size_in_mb)}MB"
+
 
 def generate_version_info(script_dir, setup_filename, current_version):
     """生成版本信息JSON - 只更新指定字段"""
@@ -139,8 +143,7 @@ def generate_version_info(script_dir, setup_filename, current_version):
     new_app_info = {
         "version": current_version,
         "release_date": release_date,
-        "download_path": f"app/{setup_filename}",
-        "size": size
+        "size": size,
     }
 
     updates_dir = script_dir / "updates"
@@ -151,7 +154,7 @@ def generate_version_info(script_dir, setup_filename, current_version):
     existing_data = {}
     if version_file.exists():
         try:
-            with open(version_file, 'r', encoding='utf-8') as f:
+            with open(version_file, "r", encoding="utf-8") as f:
                 existing_data = json.load(f)
         except (json.JSONDecodeError, Exception) as e:
             print(f"警告：读取现有version.json失败，将创建新文件: {e}")
@@ -168,13 +171,14 @@ def generate_version_info(script_dir, setup_filename, current_version):
 
     # 写入更新后的数据
     try:
-        with open(version_file, 'w', encoding='utf-8') as f:
+        with open(version_file, "w", encoding="utf-8") as f:
             json.dump(existing_data, f, indent=4, ensure_ascii=False)
         print(f"版本信息已更新到: {version_file}")
     except Exception as e:
         print(f"错误：写入version.json失败: {e}")
 
     return existing_data
+
 
 def move_output_to_app(script_dir):
     """将Output文件夹中的文件移动到app文件夹"""
@@ -202,9 +206,10 @@ def move_output_to_app(script_dir):
         print(f"警告：删除Output目录失败: {e}")
 
     for file in setup_files:
-        if file.name.startswith("BBH3ScanLaunch_Setup_v"):
+        if file.name == "BBH3ScanLaunch_Setup.exe":
             return file.name
     return None
+
 
 def find_inno_compiler():
     """查找 Inno Setup 编译器"""
@@ -212,7 +217,7 @@ def find_inno_compiler():
         "D:/Program Files (x86)/Inno Setup 6/ISCC.exe",
         "C:/Program Files (x86)/Inno Setup 6/ISCC.exe",
         "C:/Program Files/Inno Setup 6/ISCC.exe",
-        "D:/Program Files/Inno Setup 6/ISCC.exe"
+        "D:/Program Files/Inno Setup 6/ISCC.exe",
     ]
 
     for path in possible_paths:
@@ -220,13 +225,16 @@ def find_inno_compiler():
             return Path(path)
 
     try:
-        result = subprocess.run(["where", "ISCC.exe"], capture_output=True, text=True, shell=True)
+        result = subprocess.run(
+            ["where", "ISCC.exe"], capture_output=True, text=True, shell=True
+        )
         if result.returncode == 0 and result.stdout.strip():
-            return Path(result.stdout.strip().split('\n')[0])
+            return Path(result.stdout.strip().split("\n")[0])
     except:
         pass
 
     return None
+
 
 def build_installer():
     """构建安装包"""
@@ -262,7 +270,7 @@ def build_installer():
             capture_output=True,
             text=True,
             cwd=script_dir,
-            encoding='utf-8'
+            encoding="utf-8",
         )
         print("编译完成")
 
@@ -276,7 +284,9 @@ def build_installer():
         print(f"安装包文件名: {setup_filename}")
 
         if setup_filename:
-            version_info = generate_version_info(script_dir, setup_filename, current_version)
+            version_info = generate_version_info(
+                script_dir, setup_filename, current_version
+            )
             if "app_info" in version_info:
                 print(f"安装包版本: {version_info['app_info']['version']}")
                 print(f"安装包大小: {version_info['app_info']['size']}")
@@ -291,8 +301,10 @@ def build_installer():
     except Exception as e:
         print(f"发生错误: {str(e)}")
         import traceback
+
         traceback.print_exc()
         return False
+
 
 def main():
     print("开始构建安装包...")
@@ -301,6 +313,7 @@ def main():
     else:
         print("安装包构建失败")
         sys.exit(1)
+
 
 if __name__ == "__main__":
     main()
