@@ -265,10 +265,23 @@ class GuiHandler(logging.Handler):
         # 连接到 QTextBrowser.append（QueuedConnection，线程安全）
         self._emitter.sig.connect(text_widget.append)
         self.setFormatter(logging.Formatter("[%(levelname)s] %(message)s"))
+        # 新增：重复日志过滤缓冲区，长度为3
+        from collections import deque
+        self._log_buffer = deque(maxlen=3)
+        self.filter_enabled = True  # 可加配置开关
 
     def emit(self, record):
         try:
             msg = self.format(record)
+            # 忽略空行
+            if not msg.strip():
+                return
+            # 仅过滤 INFO/DEBUG，ERROR/WARNING 不过滤
+            if self.filter_enabled and record.levelno in (logging.INFO, logging.DEBUG):
+                # 检查最近3条是否有重复（只要出现过就拦截）
+                if msg in self._log_buffer:
+                    return  # 拦截输出
+                self._log_buffer.append(msg)
             self._emitter.sig.emit(msg)
         except Exception:
             # 确保日志系统自身不抛异常
