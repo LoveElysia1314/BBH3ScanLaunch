@@ -44,6 +44,10 @@ class ConfigManager:
         self.cap = None
         # 从权威源获取版本
         self.current_version = version_manager.get_version_info("current")
+        
+        # 初始化 oa_token 和 bh_ver 属性
+        self.oa_token = None
+        self.bh_ver = None
 
         self.config = self._load_config()
 

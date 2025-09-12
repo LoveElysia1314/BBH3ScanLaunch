@@ -85,7 +85,7 @@ class WindowCapture:
     """
 
     def __init__(self, window_title):
-        print(f"[DEBUG] 初始化窗口捕获器: {window_title}")
+        logging.debug(f"初始化窗口捕获器: {window_title}")
         self.window_title = window_title
         self.hwnd = None
         self._retry_count = 0
@@ -94,21 +94,21 @@ class WindowCapture:
         """查找崩坏3游戏窗口句柄"""
         self.hwnd = win32gui.FindWindow(None, self.window_title)
         if self.hwnd:
-            print(f"[DEBUG] 找到窗口句柄: {self.hwnd}")
+            logging.debug(f"找到窗口句柄: {self.hwnd}")
             return True
-        print(f"[DEBUG] 未找到窗口: {self.window_title}")
+        logging.debug(f"未找到窗口: {self.window_title}")
         return False
 
     def capture_window(self):
         """截取整个游戏窗口画面（支持后台窗口）"""
         try:
             if not self.hwnd and not self._find_window():
-                print("[DEBUG] 无法获取窗口句柄，截图失败")
+                logging.debug("无法获取窗口句柄，截图失败")
                 return None
 
             left, top, right, bot = win32gui.GetWindowRect(self.hwnd)
             width, height = right - left, bot - top
-            print(f"[DEBUG] 窗口尺寸: {width}x{height}")
+            logging.debug(f"窗口尺寸: {width}x{height}")
 
             hwndDC = win32gui.GetWindowDC(self.hwnd)
             mfcDC = win32ui.CreateDCFromHandle(hwndDC)
@@ -137,7 +137,7 @@ class WindowCapture:
             win32gui.ReleaseDC(self.hwnd, hwndDC)
             return pil_img
         except Exception as e:
-            print(f"[ERROR] 窗口捕获出错: {e}")
+            logging.error(f"窗口捕获出错: {e}")
             self.hwnd = None
             return None
 
@@ -149,10 +149,10 @@ class ImageProcessor:
     """
 
     def __init__(self, template_dir=TEMPLATE_DIR):
-        print("[INFO] 初始化图像处理器")
+        logging.info("初始化图像处理器")
         self.template_dir = template_dir
         self.screen_width, self.screen_height = self._get_screen_resolution()
-        print(f"[INFO] 屏幕分辨率: {self.screen_width}x{self.screen_height}")
+        logging.info(f"屏幕分辨率: {self.screen_width}x{self.screen_height}")
         self.template_cache = {}  # 内存缓存模板
         self.window_capturer = None  # 延迟初始化窗口捕获器
         self._load_templates()
@@ -168,10 +168,10 @@ class ImageProcessor:
 
     def _load_templates(self):
         """加载模板图片并缩放到当前屏幕分辨率"""
-        print("[DEBUG] 开始加载模板到内存")
+        logging.debug("开始加载模板到内存")
         if not os.path.exists(self.template_dir):
             os.makedirs(self.template_dir, exist_ok=True)
-            print(f"[INFO] 已创建模板目录: {self.template_dir}")
+            logging.info(f"已创建模板目录: {self.template_dir}")
             return
 
         loaded_count = 0
@@ -183,10 +183,10 @@ class ImageProcessor:
             src_resolution = self._get_resolution_from_filename(filename)
 
             if not src_resolution:
-                print(f"[WARNING] 跳过文件（缺少有效分辨率标识）: {filename}")
+                logging.warning(f"跳过文件（缺少有效分辨率标识）: {filename}")
                 continue
 
-            # print(f"[DEBUG] 加载模板: {filename} (源分辨率: {src_resolution}p)")
+            # logging.debug(f"加载模板: {filename} (源分辨率: {src_resolution}p)")
             try:
                 # 使用PIL代替cv2加载和缩放模板
                 template_img = Image.open(file_path).convert("L")
@@ -200,36 +200,36 @@ class ImageProcessor:
                 # 缓存PIL图像对象
                 self.template_cache[filename] = scaled_template
             except Exception as e:
-                print(f"[WARNING] 加载或缩放模板出错: {filename}, {e}")
+                logging.warning(f"加载或缩放模板出错: {filename}, {e}")
                 continue
             loaded_count += 1
-            # print(f"[DEBUG] 已缓存模板: {filename} ({new_size[0]}x{new_size[1]})")
+            # logging.debug(f"已缓存模板: {filename} ({new_size[0]}x{new_size[1]})")
 
-        print(f"[INFO] 模板加载完成，共加载 {loaded_count} 个模板")
+        logging.info(f"模板加载完成，共加载 {loaded_count} 个模板")
 
     def _init_window_capturer(self):
         """初始化崩坏3游戏窗口捕获器（延迟加载）"""
         if self.window_capturer is None:
-            print("[INFO] 初始化窗口捕获器")
+            logging.info("初始化窗口捕获器")
             self.window_capturer = WindowCapture(GAME_WINDOW_TITLE)
         return self.window_capturer
 
     def capture_screen(self):
         """捕获整个崩坏3游戏窗口的灰度图像"""
-        # print("[DEBUG] 开始屏幕捕获")
+        # logging.debug("开始屏幕捕获")
         capturer = self._init_window_capturer()
         pil_img = capturer.capture_window()
         if pil_img is None:
-            print("[WARNING] 屏幕捕获失败")
+            logging.warning("屏幕捕获失败")
             return None
 
         return pil_img.convert("L")
 
     def match_template(self, template_name, screen_gray, threshold=0.8):
         """在屏幕图像中匹配指定模板，返回匹配位置和置信度"""
-        # print(f"[DEBUG] 开始模板匹配: {template_name}")
+        # logging.debug(f"开始模板匹配: {template_name}")
         if template_name not in self.template_cache:
-            print(f"[WARNING] 模板不存在: {template_name}")
+            logging.warning(f"模板不存在: {template_name}")
             return None, 0
 
         template = self.template_cache[template_name]
@@ -261,7 +261,7 @@ class ImageProcessor:
 
     def match_and_click(self, threshold=0.8):
         """匹配所有模板并点击置信度最高的位置（若激活游戏窗口成功）"""
-        print("[DEBUG] 开始模板匹配点击流程")
+        logging.debug("开始模板匹配点击流程")
         best_match = None
         best_confidence = 0
         screen_gray = self.capture_screen()
@@ -279,49 +279,49 @@ class ImageProcessor:
             x = max(0, min(x, self.screen_width - 1))
             y = max(0, min(y, self.screen_height - 1))
 
-            print(
-                f"[INFO] 匹配到位置: {template_name} @ ({x}, {y}), 置信度: {confidence:.2f}"
+            logging.info(
+                f"匹配到位置: {template_name} @ ({x}, {y}), 置信度: {confidence:.2f}"
             )
             if active_game_window():
                 pyautogui.click(x, y)
-                print(f"[INFO] 点击对应模板")
+                logging.info("点击对应模板")
                 return True
             else:
-                print(f"[INFO] 游戏窗口未激活，取消点击")
+                logging.info("游戏窗口未激活，取消点击")
                 return False
-        print("[DEBUG] 未找到符合条件的匹配")
+        logging.debug("未找到符合条件的匹配")
         return False
 
     async def parse_qr_code(self, image_source="clipboard", config=None, bh_info=None):
         """从剪贴板或游戏窗口解析二维码并完成崩坏3登录"""
         try:
             if image_source == "clipboard":
-                print("[DEBUG] 从剪贴板获取图像")
+                logging.debug("从剪贴板获取图像")
                 im = ImageGrab.grabclipboard()
                 if not isinstance(im, Image.Image):
                     return False
             elif image_source == "game_window":
-                print("[DEBUG] 从游戏窗口获取图像")
+                logging.debug("从游戏窗口获取图像")
                 capturer = self._init_window_capturer()
                 im = capturer.capture_window()
                 if im is None:
-                    print("[WARNING] 游戏窗口截图失败")
+                    logging.warning("游戏窗口截图失败")
                     return False
                 im = im.convert("RGB")
             else:
-                print("[WARNING] 无效的图像来源")
+                logging.warning("无效的图像来源")
                 return False
 
             result = decode(im)
             if not result:
-                print("[DEBUG] 未检测到二维码")
+                logging.debug("未检测到二维码")
                 return False
 
             url = result[0].data.decode("utf-8")
-            print(f"[DEBUG] 解码URL: {url}")
+            logging.debug(f"解码URL: {url}")
 
             if "ticket=" not in url:
-                print("[DEBUG] 无效的二维码格式")
+                logging.debug("无效的二维码格式")
                 return False
 
             ticket = next(
@@ -334,29 +334,29 @@ class ImageProcessor:
             )
 
             if ticket and config and bh_info:
-                print("[INFO] 检测到有效登陆票据，开始扫码验证")
+                logging.info("检测到有效登陆票据，开始扫码验证")
                 await mihoyosdk.scanCheck(bh_info, ticket, config)
                 self.clear_clipboard()
-                print("[INFO] 扫码验证完成")
+                logging.info("扫码验证完成")
                 return True
 
-            print("[INFO] 缺少必要的登陆信息")
+            logging.info("缺少必要的登陆信息")
             return False
 
         except Exception as e:
-            print(f"[ERROR] 二维码解析出错: {e}")
+            logging.error(f"二维码解析出错: {e}")
             return False
 
     def clear_clipboard(self):
         """清空系统剪贴板内容"""
         try:
-            print("[DEBUG] 清空剪贴板")
+            logging.debug("清空剪贴板")
             if windll.user32.OpenClipboard(None):
                 windll.user32.EmptyClipboard()
                 windll.user32.CloseClipboard()
-                print("[DEBUG] 剪贴板已清空")
+                logging.debug("剪贴板已清空")
         except Exception as e:
-            print(f"[ERROR] 清空剪贴板出错: {e}")
+            logging.error(f"清空剪贴板出错: {e}")
 
 
 # 初始化全局实例

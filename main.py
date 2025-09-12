@@ -7,7 +7,7 @@ import webbrowser
 from threading import Thread
 from flask import Flask, abort, render_template, request
 import logging
-from PySide6.QtCore import QThread, Signal, QTimer
+from PySide6.QtCore import QThread, Signal, QTimer, QObject
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QApplication, QMainWindow, QFileDialog, QMessageBox
 import bsgamesdk
@@ -220,7 +220,8 @@ class ParseThread(QThread):
 def login_accept():
     # 创建并启动登录线程
     ui.backendLogin = LoginThread()
-    ui.backendLogin.update_log.connect(print)
+    # 将线程日志转发到 logging（再由 GUI 处理器显示）
+    ui.backendLogin.update_log.connect(lambda s: logging.info(s))
     # 连接登录完成信号到主窗口的处理函数
     ui.backendLogin.login_complete.connect(window.handle_login_complete)
     # 连接登录完成信号到启动解析线程的函数
@@ -239,7 +240,7 @@ def start_parse_thread_after_login(success):
         return
     # 创建并启动解析线程
     ui.backendClipCheck = ParseThread()
-    ui.backendClipCheck.update_log.connect(print)
+    ui.backendClipCheck.update_log.connect(lambda s: logging.info(s))
     ui.backendClipCheck.exit_app.connect(
         lambda: (window.restoreOriginalSettings(), app.quit())
     )
@@ -248,16 +249,30 @@ def start_parse_thread_after_login(success):
 
 
 # ========== GUI 日志处理器 ==========
+class _LogEmitter(QObject):
+    sig = Signal(str)
+
+
 class GuiHandler(logging.Handler):
+    """将日志线程安全地追加到 QTextBrowser。
+
+    通过 Qt 信号切换到主线程，避免在非GUI线程直接操作控件。
+    """
+
     def __init__(self, text_widget):
         super().__init__()
-        self.text_widget = text_widget
-        # 设置默认格式化器，包含日志等级
+        self._emitter = _LogEmitter()
+        # 连接到 QTextBrowser.append（QueuedConnection，线程安全）
+        self._emitter.sig.connect(text_widget.append)
         self.setFormatter(logging.Formatter("[%(levelname)s] %(message)s"))
 
     def emit(self, record):
-        msg = self.format(record)
-        self.text_widget.append(msg)
+        try:
+            msg = self.format(record)
+            self._emitter.sig.emit(msg)
+        except Exception:
+            # 确保日志系统自身不抛异常
+            pass
 
 
 # ========== 主窗口类 ==========
@@ -426,6 +441,9 @@ if __name__ == "__main__":
         datefmt="%Y-%m-%d %H:%M:%S",
     )
     config = config_manager.config
+    # 根据配置切换日志级别（启用 DEBUG 时显示更多线程日志）
+    root_logger = logging.getLogger()
+    root_logger.setLevel(logging.DEBUG if config.get("debug_print", False) else logging.INFO)
 
     app = QApplication(sys.argv)
     window = SelfMainWindow()

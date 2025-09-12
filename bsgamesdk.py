@@ -5,6 +5,7 @@ import time
 import urllib
 import rsacr
 import requests
+import logging
 
 bililogin = "https://line1-sdk-center-login-sh.biligame.net/"
 
@@ -38,13 +39,13 @@ async def sendBiliPost(url, data):
         session.trust_env = False
         res = session.post(url=url, data=data, headers=header)
         if res is None:
-            print("[INFO] 请求错误，3s后重试...")
+            logging.info("请求错误，3s后重试...")
             await asyncio.sleep(3)
             return await sendBiliPost(url, data)
-        # print("[DEBUG]", res.json(),sep=" ")
+        # logging.debug(f"Response: {res.json()}")
         return res.json()
     except Exception as e:
-        print(f"[ERROR] B站POST请求失败: {e}")
+        logging.error(f"B站POST请求失败: {e}")
         return None
 
 
@@ -110,7 +111,7 @@ async def login1(account, password):
     data["validate"] = ""
     data["pwd"] = rsacr.rsacreate(rsa["hash"] + password, public_key)
     data = setSign(data)
-    print("[INFO] 正在尝试登录B站账号: " + account)
+    logging.info(f"正在尝试登录B站账号: {account}")
     return await sendBiliPost(bililogin + "api/client/login", data)
 
 
@@ -129,7 +130,7 @@ async def login2(account, password, challenge, gt_user, validate):
     data["seccode"] = validate + "|jordan"
     data["pwd"] = rsacr.rsacreate(rsa["hash"] + password, public_key)
     data = setSign(data)
-    print("[INFO] 正在尝试二次登录B站账号: " + account)
+    logging.info(f"正在尝试二次登录B站账号: {account}")
     return await sendBiliPost(bililogin + "api/client/login", data)
 
 
@@ -141,12 +142,12 @@ async def captcha():
 
 def make_captch(gt, challenge, gt_user):
     capurl = f"http://127.0.0.1:12983/?captcha_type=1&challenge={challenge}&gt={gt}&userid={gt_user}&gs=1"
-    print("[INFO] 验证码链接生成: " + capurl)
+    logging.info(f"验证码链接生成: {capurl}")
     return capurl
 
 
 async def login(bili_account, bili_pwd, cap=None):
-    print("[DEBUG] 正在尝试登录B站账号: " + bili_account)
+    logging.debug(f"正在尝试登录B站账号: {bili_account}")
     if cap is not None:
         login_sta = await login2(
             bili_account, bili_pwd, cap["challenge"], cap["userid"], cap["validate"]
@@ -158,6 +159,6 @@ async def login(bili_account, bili_pwd, cap=None):
         login_sta["cap_url"] = make_captch(
             cap_data["gt"], cap_data["challenge"], cap_data["gt_user_id"]
         )
-        print("[INFO] 登录失败，可能需要验证码")
-        print("[DEBUG] 登录状态: " + str(login_sta))
+        logging.info("登录失败，可能需要验证码")
+        logging.debug(f"登录状态: {login_sta}")
     return login_sta
