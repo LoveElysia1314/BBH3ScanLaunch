@@ -34,6 +34,8 @@ async def sendBiliPost(url, data):
         "Content-Type": "application/x-www-form-urlencoded",
         "Host": "line1-sdk-center-login-sh.biligame.net",
     }
+    logging.debug(f"[DEBUG] B站POST请求 - URL: {url}")
+    logging.debug(f"[DEBUG] B站POST请求 - 数据: {data}")
     try:
         session = requests.Session()
         session.trust_env = False

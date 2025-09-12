@@ -151,6 +151,8 @@ async def verify(uid, access_key):
 
 
 async def sendPost(target, data, noReturn=False):
+    logging.debug(f"[DEBUG] 米哈游POST请求 - URL: {target}")
+    logging.debug(f"[DEBUG] 米哈游POST请求 - 数据: {data}")
     try:
         session = requests.Session()
         session.trust_env = False
@@ -167,6 +169,7 @@ async def sendPost(target, data, noReturn=False):
 
 
 async def sendGet(target, default_ret=None):
+    logging.debug(f"[DEBUG] 米哈游GET请求 - URL: {target}")
     try:
         session = requests.Session()
         session.trust_env = False
@@ -181,6 +184,7 @@ async def sendGet(target, default_ret=None):
 
 
 async def sendGetRaw(target, default_ret=None):
+    logging.debug(f"[DEBUG] 米哈游GET原始请求 - URL: {target}")
     try:
         session = requests.Session()
         session.trust_env = False

@@ -262,6 +262,7 @@ class NetworkManager:
 
     def fetch_from_source(self, url, timeout=5):
         """从单个源获取数据"""
+        logging.debug(f"[DEBUG] 网络工具GET请求 - URL: {url}")
         try:
             response = requests.get(
                 url, timeout=timeout, headers={"User-Agent": "Mozilla/5.0"}

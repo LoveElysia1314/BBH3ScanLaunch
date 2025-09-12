@@ -26,6 +26,7 @@ class ConfigManager:
         "access_key": "",
         "uname": "",
         "last_login_succ": False,
+    "account_login": False,
         "clip_check": False,
         "auto_close": False,
         "auto_clip": False,

@@ -25,7 +25,7 @@ class VersionManager:
     CHANGE_LOG_PATH = "./updates/changelog.txt"
 
     # 类常量定义
-    CURRENT_VERSION = "1.3.1.1"  # 硬编码当前版本
+    CURRENT_VERSION = "1.3.1"  # 硬编码当前版本
     DEFAULT_VERSION = "0.0.0"  # 默认版本
     DEFAULT_OATOKEN = "e257aaa274fb2239094cbe64d9f5ee3e"  # v8.4版本的oa_token
     DEFAULT_BHVER = "8.4.0"  # 默认游戏版本号

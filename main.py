@@ -192,8 +192,8 @@ class ParseThread(QThread):
                                     self.exit_app.emit()
                                     return
 
-                # 处理剪贴板检查
-                if config["clip_check"] and config.get("account_login", False):
+                # 处理剪贴板检查：无论是否开启自动截图，只要已登录就尝试从剪贴板识别二维码
+                if config.get("account_login", False):
                     await image_processor.parse_qr_code(
                         image_source="clipboard",
                         config=config,

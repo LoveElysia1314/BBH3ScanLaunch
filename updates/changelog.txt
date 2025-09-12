@@ -1,15 +1,17 @@
-
-v1.3.1.1
+v1.3.1.2
 发布日期：2025.9.12
 
-修复：
-- 修复线程日志不能正确输出到 GUI/控制台的问题
+行为优化：
+- 登录后始终尝试从剪贴板识别二维码，与“自动截图”配置解耦（无需开启自动截图也可识别剪贴板中的二维码）。
 
-改进：
-- GuiHandler 通过 Qt 信号在线程间转发日志，线程安全更新 QTextBrowser
-- 将子线程 update_log 信号统一接入 logging，输出与 GUI/控制台一致
-- 将 bh3_utils.py、bsgamesdk.py 中的 print 全部替换为 logging 调用
-- 根据配置 debug_print 动态设置日志级别（DEBUG/INFO），便于排查问题
+调试与日志：
+- 为扫码登录相关的网络请求增加 DEBUG 输出，打印请求 URL 与数据：
+	- B站登录：`bsgamesdk.sendBiliPost`
+	- 米哈游接口：`mihoyosdk.sendPost`/`sendGet`/`sendGetRaw`
+	- 更新文件获取：`network_utils.fetch_from_source`（仅 URL）
+
+BUG修复：
+- 修复在未开启自动截图时，解析线程未触发剪贴板识别的情况。
 
 
 v1.3.1
@@ -33,6 +35,7 @@ v1.3.1
 BUG修复：
 - 修复错误的方法调用，调整获取 oa_token 的调用方式
 - 修复了解析线程未依据“解析二维码”选项变化的问题
+
 
 v1.3.0
 发布日期：2025.7.29
