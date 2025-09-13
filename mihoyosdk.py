@@ -7,6 +7,9 @@ import requests
 import time
 import logging
 
+# 本地模块 imports
+from version_utils import version_manager
+
 url = "https://api-sdk.mihoyo.com/bh3_cn/combo/granter/login/v2/login"
 verifyBody = (
     '{"device":"0000000000000000","app_id":"1","channel_id":"14","data":{},"sign":""}'
@@ -64,21 +67,49 @@ async def getBHVer(cache_bh_ver=None):
     return local_bh_ver
 
 
-async def getOAServer(oa_token):
-    """获取崩坏3游戏服务器分发信息"""
+async def getOAServer(oa_token=None):
+    """
+    获取崩坏3游戏服务器分发信息（dispatch 字段）。
+
+    实现逻辑：
+    1. 获取当前游戏版本号
+    2. 从 version_manager 中获取对应版本的 dispatch 字段
+       若存在且非空，则直接使用并缓存。
+    3. 若无预设 dispatch，则使用对应版本的 oa_token 通过 OA 服务器接口获取分发信息：
+       - 拼接 OA 服务器接口 https://outer-dp-bb01.bh3.com/query_gameserver?version=xxx&token=oa_token
+       - 以 oa_token 作为 token 参数，发起 GET 请求，返回 dispatch 字段内容。
+       - 缓存结果。
+    4. 若两种方式均不可用，则返回空 JSON 字符串。
+    """
     global has_dispatch, local_dispatch
 
     if has_dispatch:
         return local_dispatch
 
+    # 获取当前游戏版本
     bh_ver = await getBHVer()
-    # timestamp = int(time.time())
+
+    # 方式一：从 version_manager 获取对应版本的 dispatch
+    dispatch = version_manager.get_dispatch_for_version(bh_ver)
+    if dispatch and dispatch.strip():
+        logging.debug(f"从 version.json 获取 {bh_ver} 版本的 dispatch 成功")
+        has_dispatch = True
+        local_dispatch = dispatch
+        return dispatch
+    else:
+        logging.debug(f"version.json 中无 {bh_ver} 版本的有效 dispatch 字段")
+
+    # 方式二：使用对应版本的 oa_token 通过 OA 服务器接口获取分发信息
+    oa_token = version_manager.get_oa_token_for_version(bh_ver)
+    if not oa_token:
+        logging.error(f"version.json 中无 {bh_ver} 版本的有效 oa_token")
+        return "{}"
+
     oa_main_url = "https://outer-dp-bb01.bh3.com/query_gameserver?"
     param = f"version={bh_ver}_gf_android_bilibili&token={oa_token}"
     dispatch = await sendGetRaw(oa_main_url + param, "")
 
     has_dispatch = True
-
     local_dispatch = dispatch
     return dispatch
 
@@ -151,8 +182,8 @@ async def verify(uid, access_key):
 
 
 async def sendPost(target, data, noReturn=False):
-    logging.debug(f"[DEBUG] 米哈游POST请求 - URL: {target}")
-    logging.debug(f"[DEBUG] 米哈游POST请求 - 数据: {data}")
+    logging.debug(f"米哈游POST请求 - URL: {target}")
+    logging.debug(f"米哈游POST请求 - 数据: {data}")
     try:
         session = requests.Session()
         session.trust_env = False
@@ -169,7 +200,7 @@ async def sendPost(target, data, noReturn=False):
 
 
 async def sendGet(target, default_ret=None):
-    logging.debug(f"[DEBUG] 米哈游GET请求 - URL: {target}")
+    logging.debug(f"米哈游GET请求 - URL: {target}")
     try:
         session = requests.Session()
         session.trust_env = False
@@ -184,7 +215,7 @@ async def sendGet(target, default_ret=None):
 
 
 async def sendGetRaw(target, default_ret=None):
-    logging.debug(f"[DEBUG] 米哈游GET原始请求 - URL: {target}")
+    logging.debug(f"米哈游GET原始请求 - URL: {target}")
     try:
         session = requests.Session()
         session.trust_env = False

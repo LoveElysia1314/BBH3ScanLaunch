@@ -13,11 +13,10 @@ class VersionInfo(TypedDict):
     current: str
     remote: str
     default: str
-    oa_token: str
-    bh_ver: str
+    oa_versions: dict[str, dict[str, str]]
 
 
-VersionKey = Literal["current", "remote", "default", "oa_token", "bh_ver", "all"]
+VersionKey = Literal["current", "remote", "default", "oa_versions", "all"]
 
 
 class VersionManager:
@@ -33,7 +32,7 @@ class VersionManager:
     def __init__(self):
         # 实例变量初始化
         self.remote_version = self._load_version_from_file()
-        self.oa_token, self.bh_ver = self._load_oa_info_from_file()
+        self.oa_versions = self._load_oa_versions_from_file()
 
         # 缓存版本信息字典
         self._version_info_cache = self._build_version_info()
@@ -44,9 +43,14 @@ class VersionManager:
             "current": self.CURRENT_VERSION,
             "remote": self.remote_version,
             "default": self.DEFAULT_VERSION,
-            "oa_token": self.oa_token,
-            "bh_ver": self.bh_ver,
+            "oa_versions": self.oa_versions,
         }
+
+    def get_version_info(self, key: VersionKey) -> Union[str, dict[str, dict[str, str]]]:
+        """获取版本信息"""
+        if key == "all":
+            return self._version_info_cache
+        return self._version_info_cache.get(key, "")
 
     def _load_version_from_file(self) -> str:
         """从version.json加载远程版本"""
@@ -60,42 +64,45 @@ class VersionManager:
             logging.warning(f"读取版本文件失败: {e}")
             return self.DEFAULT_VERSION
 
-    def _load_oa_info_from_file(self) -> tuple[str, str]:
-        """从version.json读取oa_token和bh_ver"""
+    def _load_oa_versions_from_file(self) -> dict[str, dict[str, str]]:
+        """从version.json读取oa_versions"""
         try:
             if os.path.exists(self.VERSION_CONFIG_PATH):
                 with open(self.VERSION_CONFIG_PATH) as f:
                     data = json.load(f)
-                    oa_token = data.get("oa_info", {}).get(
-                        "oa_token", self.DEFAULT_OATOKEN
-                    )
-                    bh_ver = data.get("oa_info", {}).get("bh_ver", self.DEFAULT_BHVER)
-                    return oa_token, bh_ver
-            return self.DEFAULT_OATOKEN, self.DEFAULT_BHVER
+                    oa_versions = data.get("oa_versions", {})
+                    if not oa_versions:
+                        # 如果没有oa_versions，尝试从旧格式迁移
+                        oa_token = data.get("oa_info", {}).get("oa_token", self.DEFAULT_OATOKEN)
+                        bh_ver = data.get("oa_info", {}).get("bh_ver", self.DEFAULT_BHVER)
+                        dispatch = data.get("dispatch", "")
+                        oa_versions = {
+                            bh_ver: {
+                                "oa_token": oa_token,
+                                "dispatch": dispatch
+                            }
+                        }
+                    return oa_versions
+            return {}
         except (JSONDecodeError, IOError) as e:
-            logging.warning(f"读取OA信息失败: {e}")
-            return self.DEFAULT_OATOKEN, self.DEFAULT_BHVER
+            logging.warning(f"读取OA版本信息失败: {e}")
+            return {}
 
-    def get_version_info(self, key: VersionKey = "all") -> Union[str, VersionInfo]:
-        """
-        获取版本相关信息
+    def get_oa_token_for_version(self, bh_ver: str) -> str:
+        """根据游戏版本获取对应的oa_token"""
+        if bh_ver in self.oa_versions:
+            return self.oa_versions[bh_ver].get("oa_token", self.DEFAULT_OATOKEN)
+        return self.DEFAULT_OATOKEN
 
-        :param key: 查询键值，支持:
-            'current' - 当前程序版本
-            'remote' - 远程版本
-            'default' - 默认版本
-            'oa_token' - OA令牌
-            'bh_ver' - 游戏版本
-            'all' - 返回全部版本信息字典
-        :return: 请求的版本信息
-        """
-        if key == "all":
-            return self._version_info_cache
+    def get_dispatch_for_version(self, bh_ver: str) -> str:
+        """根据游戏版本获取对应的dispatch"""
+        if bh_ver in self.oa_versions:
+            return self.oa_versions[bh_ver].get("dispatch", "")
+        return ""
 
-        if key in self._version_info_cache:
-            return self._version_info_cache[key]
-
-        raise ValueError(f"无效的版本信息键: {key}")
+    def has_version_support(self, bh_ver: str) -> bool:
+        """检查是否支持指定的游戏版本"""
+        return bh_ver in self.oa_versions
 
     def has_update(self) -> bool:
         """检查是否存在新版本"""
@@ -136,14 +143,12 @@ class VersionManager:
             return False
 
     def refresh_oa_info(self) -> bool:
-        """刷新OA令牌和游戏版本信息"""
+        """刷新OA版本信息"""
         try:
-            new_oa_token, new_bh_ver = self._load_oa_info_from_file()
-            if new_oa_token != self.oa_token or new_bh_ver != self.bh_ver:
-                self.oa_token = new_oa_token
-                self.bh_ver = new_bh_ver
-                self._version_info_cache["oa_token"] = new_oa_token
-                self._version_info_cache["bh_ver"] = new_bh_ver
+            new_oa_versions = self._load_oa_versions_from_file()
+            if new_oa_versions != self.oa_versions:
+                self.oa_versions = new_oa_versions
+                self._version_info_cache["oa_versions"] = new_oa_versions
                 return True
             return False
         except Exception as e:

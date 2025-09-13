@@ -19,10 +19,17 @@ from utils import DummyWriter
 # ========== 初始化配置管理器和版本更新工具 ==========
 from network_utils import network_manager
 from config_utils import config_manager
-from version_utils import version_manager  # 导入版本管理器和版本变量
+from version_utils import version_manager  # 导入版本管理器
 
-BH_VER = version_manager.get_version_info("bh_ver")  # 当前崩坏三版本
-OA_TOKEN = version_manager.get_version_info("oa_token")  # 当前oa_token
+# 获取默认版本信息（使用最新的支持版本）
+oa_versions = version_manager.get_version_info("oa_versions")
+if oa_versions:
+    default_bh_ver = max(oa_versions.keys())
+    BH_VER = default_bh_ver  # 当前崩坏三版本
+    OA_TOKEN = version_manager.get_oa_token_for_version(default_bh_ver)  # 当前oa_token
+else:
+    BH_VER = "8.4.0"  # 默认版本
+    OA_TOKEN = "e257aaa274fb2239094cbe64d9f5ee3e"  # 默认token
 
 
 # ========== 更新检查线程 ==========
@@ -51,7 +58,7 @@ class LoginThread(QThread):
     login_complete = Signal(bool)  # 登录完成信号，传递成功/失败状态
 
     async def login(self):
-        logging.info("正在登录B站账号 15018032172...")
+        logging.info("正在登录B站账号...")
         try:
             config = config_manager.config
             if config["last_login_succ"]:
@@ -109,7 +116,27 @@ class LoginThread(QThread):
             # 检查版本是否匹配
             if server_bh_ver != BH_VER:
                 logging.info(f"版本不匹配 (本地: {BH_VER}, 服务器: {server_bh_ver})！")
+
+            # 检查是否有对应版本的支持
+            if not version_manager.has_version_support(server_bh_ver):
+                logging.warning(f"警告：当前配置不支持游戏版本 {server_bh_ver}！")
+                logging.warning("请更新 version.json 中的 oa_versions 配置以支持新版本")
+                # 可以选择使用默认版本或提示用户
+                if version_manager.oa_versions:
+                    # 使用最新的支持版本
+                    supported_ver = max(version_manager.oa_versions.keys())
+                    logging.info(f"将使用支持的版本 {supported_ver} 继续")
+                    server_bh_ver = supported_ver
+                else:
+                    logging.error("无任何支持的版本配置！")
+                    self.login_complete.emit(False)
+                    return
+
             logging.info(f"当前崩坏3版本: {server_bh_ver}")
+
+            # 根据服务器版本获取对应的OA_TOKEN
+            OA_TOKEN = version_manager.get_oa_token_for_version(server_bh_ver)
+
             oa = await mihoyosdk.getOAServer(OA_TOKEN)
             if len(oa) < 100:
                 logging.info("获取OA服务器失败！请检查Token后重试")
