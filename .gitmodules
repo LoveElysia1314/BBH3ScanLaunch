@@ -1,0 +1,3 @@
+[submodule "fetch_bbh3_oa_dispatch"]
+	path = fetch_bbh3_oa_dispatch
+	url = https://github.com/LoveElysia1314/BBH3ScanLaunch-fetch-bbh3-oa-dispatch.git
