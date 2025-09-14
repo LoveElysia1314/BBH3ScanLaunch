@@ -3,7 +3,7 @@ import hashlib
 import json
 import time
 import urllib
-import rsacr
+from ...utils import rsacr
 import requests
 import logging
 
@@ -44,8 +44,12 @@ async def sendBiliPost(url, data):
             logging.info("请求错误，3s后重试...")
             await asyncio.sleep(3)
             return await sendBiliPost(url, data)
-        # logging.debug(f"Response: {res.json()}")
-        return res.json()
+        try:
+            return res.json()
+        except json.JSONDecodeError as json_err:
+            logging.error(f"B站POST请求失败: 响应不是有效JSON - {json_err}")
+            logging.error(f"响应内容: {res.text[:500]}...")  # 记录前500字符
+            return None
     except Exception as e:
         logging.error(f"B站POST请求失败: {e}")
         return None

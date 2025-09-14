@@ -20,8 +20,8 @@ VersionKey = Literal["current", "remote", "default", "oa_versions", "all"]
 
 
 class VersionManager:
-    VERSION_CONFIG_PATH = "./updates/version.json"
-    CHANGE_LOG_PATH = "./updates/changelog.txt"
+    VERSION_CONFIG_PATH = os.path.join(os.path.dirname(__file__), "..", "..", "..", "updates", "version.json")
+    CHANGE_LOG_PATH = os.path.join(os.path.dirname(__file__), "..", "..", "..", "updates", "changelog.txt")
 
     # 类常量定义
     CURRENT_VERSION = "1.3.1"  # 硬编码当前版本

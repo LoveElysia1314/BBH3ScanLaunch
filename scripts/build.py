@@ -8,10 +8,13 @@ import site
 
 site.ENABLE_USER_SITE = False
 
-from version_utils import version_manager
+sys.path.insert(0, str((Path(__file__).parent.parent / "src").resolve()))
+sys.path.insert(0, str((Path(__file__).parent.parent / "src" / "bbh3_scan_launch" / "utils").resolve()))
+from bbh3_scan_launch.utils.version_utils import version_manager
 
 version = version_manager.get_version_info("current")
 
+sys.path.insert(0, str((Path(__file__).parent / "build_installer.py").parent.resolve()))
 import build_installer
 
 USE_ONEFILE = False  # True=单文件，False=多文件
@@ -19,10 +22,12 @@ USE_ONEFILE = False  # True=单文件，False=多文件
 
 def main():
     os.environ["PYTHONUTF8"] = "1"
+    # 项目根目录（假定 scripts/ 与 run.py 同级）
+    project_root = Path(__file__).parent.parent.resolve()
     script_dir = Path(__file__).parent.resolve()
 
     # 设置虚拟环境路径
-    venv_dir = script_dir / "venv"
+    venv_dir = project_root / "venv"
     activate_script = (
         venv_dir / ("Scripts" if sys.platform == "win32" else "bin") / "activate"
     )
@@ -51,36 +56,34 @@ def main():
     pip_cmd = [
         str(pip_exe),
         "install",
-        "--upgrade",
-        "pip",
         "-r",
-        str(script_dir / "requirements.txt"),
+        str(project_root / "requirements.txt"),
     ]
     subprocess.run(pip_cmd, check=True)
 
     # 清理缓存
-    for cache_dir in ["__pycache__", "build", "dist"]:
+    for cache_dir in [project_root / "__pycache__", project_root / "build", project_root / "dist"]:
         shutil.rmtree(cache_dir, ignore_errors=True)
 
     # 构建路径
-    output_dir = script_dir / "dist"
+    output_dir = project_root / "dist"
     exe_name = "BBH3ScanLaunch.exe"
     app_dir = output_dir if USE_ONEFILE else output_dir / "BBH3ScanLaunch"
 
     # 执行PyInstaller构建
     with tempfile.TemporaryDirectory() as tmpdir:
         os.chdir(tmpdir)
-        build_dir = script_dir / "build_pyinstaller"
+        build_dir = project_root / "build_pyinstaller"
         shutil.rmtree(build_dir, ignore_errors=True)
         build_dir.mkdir(parents=True, exist_ok=True)
         os.chdir(build_dir)
 
-        run_pyinstaller(script_dir, venv_dir, output_dir, tmpdir)
+        run_pyinstaller(project_root, venv_dir, output_dir, tmpdir)
 
-    os.chdir(script_dir)
+    os.chdir(project_root)
 
     # 复制资源文件
-    copy_resources(script_dir, app_dir)
+    copy_resources(project_root, app_dir)
 
     # 创建快捷方式
     if sys.platform == "win32":
@@ -136,6 +139,8 @@ def run_pyinstaller(script_dir, venv_dir, output_dir, tmpdir):
         str(output_dir),
         "--specpath",
         tmpdir,
+    "--paths",
+    str(script_dir / "src"),  # 关键：让 PyInstaller 能找到 src 包
         "--noconsole",
         "--uac-admin",
         "-i",
@@ -144,15 +149,20 @@ def run_pyinstaller(script_dir, venv_dir, output_dir, tmpdir):
         "PyQt5",
         "--exclude-module",
         "PyQt6",
+    # 确保分析阶段能解析到包和 GUI 依赖
+    "--hidden-import",
+    "bbh3_scan_launch",
+    "--hidden-import",
+    "bbh3_scan_launch.main",
         "--add-binary",
         f"{venv_dir / 'Lib' / 'site-packages' / 'pyzbar' / 'libiconv.dll'};.",
         "--add-binary",
         f"{venv_dir / 'Lib' / 'site-packages' / 'pyzbar' / 'libzbar-64.dll'};.",
-        "--add-data",
-        f"{script_dir / 'templates'};templates",
-        "--add-data",
-        f"{script_dir / 'Pictures_to_Match'};Pictures_to_Match",
-        str(script_dir / "main.py"),
+    "--add-data",
+    f"{(script_dir / 'resources' / 'templates').resolve()};resources\\templates",
+    "--add-data",
+    f"{(script_dir / 'resources' / 'pictures_to_match').resolve()};resources\\pictures_to_match",
+    str((script_dir / "run.py").resolve()),
     ]
 
     if USE_ONEFILE:
@@ -170,25 +180,24 @@ def run_pyinstaller(script_dir, venv_dir, output_dir, tmpdir):
         raise
 
 
-def copy_resources(script_dir, app_dir):
-    """复制所有资源文件"""
-    resources = [
-        ("templates", "目录"),
-        ("Pictures_to_Match", "目录"),
-        ("updates", "目录"),
-        ("BHimage.ico", "文件"),
+def copy_resources(project_root, app_dir):
+    """复制所有资源文件（基于项目根目录）"""
+    pairs = [
+        (project_root / "resources" / "templates", app_dir / "resources" / "templates"),
+        (project_root / "resources" / "pictures_to_match", app_dir / "resources" / "pictures_to_match"),
+        (project_root / "updates", app_dir / "updates"),
+        (project_root / "BHimage.ico", app_dir / "BHimage.ico"),
     ]
 
-    for src_path, res_type in resources:
-        src = script_dir / src_path
-        dst = app_dir / src_path
-
+    for src, dst in pairs:
+        src = src.resolve()
         if not src.exists():
-            print(f"警告：找不到资源: {src_path}")
+            print(f"警告：找不到资源: {src}")
             continue
 
-        if res_type == "目录":
+        if src.is_dir():
             shutil.rmtree(dst, ignore_errors=True)
+            dst.parent.mkdir(parents=True, exist_ok=True)
             shutil.copytree(src, dst)
         else:
             dst.parent.mkdir(parents=True, exist_ok=True)

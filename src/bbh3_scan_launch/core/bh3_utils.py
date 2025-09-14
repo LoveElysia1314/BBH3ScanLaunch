@@ -12,10 +12,10 @@ from pyzbar.pyzbar import decode
 import win32con
 import win32gui
 import win32ui
-import mihoyosdk
+from .sdk import mihoyosdk
 
 # 常量定义
-TEMPLATE_DIR = "Pictures_to_Match"  # 模板图片目录
+TEMPLATE_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "..", "resources", "pictures_to_match")  # 模板图片目录
 GAME_WINDOW_TITLE = "崩坏3"  # 游戏窗口标题
 
 

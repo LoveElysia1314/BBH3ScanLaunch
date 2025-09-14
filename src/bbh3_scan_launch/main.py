@@ -1,6 +1,7 @@
 # main.py
 import ctypes
 import sys
+import os
 import asyncio
 import subprocess
 import webbrowser
@@ -10,16 +11,21 @@ import logging
 from PySide6.QtCore import QThread, Signal, QTimer, QObject
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QApplication, QMainWindow, QFileDialog, QMessageBox
-import bsgamesdk
-import mihoyosdk
-import mainWindow
-from bh3_utils import image_processor, is_game_window_exist, click_center_of_game_window
-from utils import DummyWriter
+from .core.sdk import bsgamesdk
+from .core.sdk import mihoyosdk
+from .gui import main_window as mainWindow
+from .core.bh3_utils import image_processor, is_game_window_exist, click_center_of_game_window
+from .utils.utils import DummyWriter
 
 # ========== 初始化配置管理器和版本更新工具 ==========
-from network_utils import network_manager
-from config_utils import config_manager
-from version_utils import version_manager  # 导入版本管理器
+from .utils.network_utils import network_manager
+from .utils.config_utils import config_manager
+from .utils.version_utils import version_manager  # 导入版本管理器
+
+# ========== 全局变量 ==========
+ui = None
+window = None
+app = None
 
 # 获取默认版本信息（使用最新的支持版本）
 oa_versions = version_manager.get_version_info("oa_versions")
@@ -66,10 +72,11 @@ class LoginThread(QThread):
                 bs_user_info = await bsgamesdk.getUserInfo(
                     config["uid"], config["access_key"]
                 )
-                if "uname" in bs_user_info:
+                if bs_user_info and "uname" in bs_user_info:
                     logging.info(f"登陆B站账号 {bs_user_info['uname']} 成功！")
                     bs_info = {"uid": config["uid"], "access_key": config["access_key"]}
                 else:
+                    logging.warning("缓存账号验证失败，将重新登录")
                     config.update(
                         {
                             "last_login_succ": False,
@@ -84,14 +91,18 @@ class LoginThread(QThread):
                 bs_info = await bsgamesdk.login(
                     config["account"], config["password"], config_manager.cap
                 )
-                if "access_key" not in bs_info:
-                    self.handle_login_failure(bs_info)
+                if not bs_info or "access_key" not in bs_info:
+                    self.handle_login_failure(bs_info or {})
                     # 发出信号，即使失败也要通知主线程登录流程结束
                     self.login_complete.emit(False)
                     return
                 bs_user_info = await bsgamesdk.getUserInfo(
                     bs_info["uid"], bs_info["access_key"]
                 )
+                if not bs_user_info or "uname" not in bs_user_info:
+                    logging.error("获取用户信息失败")
+                    self.login_complete.emit(False)
+                    return
                 logging.info(f"登陆B站账号 {bs_user_info['uname']} 成功！")
                 config.update(
                     {
@@ -473,8 +484,12 @@ class SelfMainWindow(QMainWindow):
         self.check_and_display_updates()
 
 
-# ========== Flask 启动 ==========
-if __name__ == "__main__":
+# ========== 应用启动函数 ==========
+def main():
+    """运行应用程序的核心逻辑"""
+    # 设置全局变量
+    global ui, window, app
+
     logging.basicConfig(
         level=logging.INFO,
         format="[%(asctime)s] %(levelname)s: %(message)s",
@@ -494,7 +509,9 @@ if __name__ == "__main__":
     logging.getLogger().addHandler(handler)
 
     # Flask 应用设置
-    fapp = Flask(__name__)
+    # 计算模板文件夹路径（相对于_internal/的resources/templates文件夹）
+    template_dir = os.path.join(os.path.dirname(__file__), "..", "..", "resources", "templates")
+    fapp = Flask(__name__, template_folder=template_dir)
     # 禁用 Werkzeug 的日志
     log = logging.getLogger("werkzeug")
     log.setLevel(logging.ERROR)
@@ -570,3 +587,8 @@ if __name__ == "__main__":
         logging.info("检测到自动登陆参数，将启动一键登陆模式")
 
     sys.exit(app.exec())
+
+
+# ========== Flask 启动 ==========
+if __name__ == "__main__":
+    main()

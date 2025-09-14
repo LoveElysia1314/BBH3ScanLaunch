@@ -6,18 +6,24 @@ import json
 from datetime import datetime
 from pathlib import Path
 
-# 导入版本管理
-from version_utils import version_manager
+# 导入版本管理（调整为相对导入）
+sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
+sys.path.insert(0, str(Path(__file__).parent.parent / "src" / "bbh3_scan_launch" / "utils"))
+from bbh3_scan_launch.utils.version_utils import version_manager
 
-version = version_manager.CURRENT_VERSION
+version = version_manager.get_version_info("current")
 
-# 定义黑名单文件
-BLACKLIST_FILES = ["config.json"]
+# 定义黑名单文件（移除 config.json，因为不再复制）
+BLACKLIST_FILES = []
 
 
-def generate_iss_file(script_dir, current_version):
+def generate_iss_file(project_root, current_version):
     """动态生成 setup.iss 文件"""
     print("正在生成安装脚本...")
+
+    # 计算相对路径
+    dist_path = project_root / "dist" / "BBH3ScanLaunch"
+    icon_path = dist_path / "BHimage.ico"
 
     # 使用普通字符串，然后通过替换来避免转义警告
     iss_content_template = """; BBH3ScanLaunch 安装包脚本
@@ -39,13 +45,13 @@ OutputBaseFilename=BBH3ScanLaunch_Setup
 Compression=lzma
 SolidCompression=yes
 PrivilegesRequired=admin
-SetupIconFile=dist\\BBH3ScanLaunch\\BHimage.ico
+SetupIconFile={icon_path}
 AppPublisher=BBH3ScanLaunch
 ArchitecturesInstallIn64BitMode=x64
 ArchitecturesAllowed=x64
 
 [Files]
-Source: "dist\\BBH3ScanLaunch\\*"; Excludes: "config.json"; DestDir: "{{app}}\\BBH3ScanLaunch"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "{dist_path}\\*"; DestDir: "{{app}}\\BBH3ScanLaunch"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
 Name: "{{group}}\\BBH3ScanLaunch"; Filename: "{{app}}\\BBH3ScanLaunch\\{{#MyAppExeName}}"; IconFilename: "{{app}}\\BBH3ScanLaunch\\BHimage.ico"
@@ -87,24 +93,29 @@ begin
 end;
 """
 
-    # 格式化版本号
-    iss_content = iss_content_template.format(version=current_version)
+    # 格式化版本号和路径
+    iss_content = iss_content_template.format(
+        version=current_version,
+        icon_path=str(icon_path).replace("\\", "\\\\"),
+        dist_path=str(dist_path).replace("\\", "\\\\")
+    )
 
-    iss_file = script_dir / "setup.iss"
+    iss_file = project_root / "scripts" / "setup.iss"
     with open(iss_file, "w", encoding="utf-8") as f:
         f.write(iss_content)
     return iss_file
 
 
-def check_required_files(script_dir):
+def check_required_files(project_root):
     """检查必要的文件是否存在"""
-    app_dir = script_dir / "dist" / "BBH3ScanLaunch"
+    app_dir = project_root / "dist" / "BBH3ScanLaunch"
     required_paths = [
         app_dir / "BBH3ScanLaunch.exe",
         app_dir / "BHimage.ico",
         app_dir,
-        app_dir / "Pictures_to_Match",
-        app_dir / "templates",
+        app_dir / "resources" / "pictures_to_match",
+        app_dir / "resources" / "templates",
+        app_dir / "updates",
     ]
 
     missing_files = []
@@ -130,10 +141,10 @@ def format_file_size(size_in_bytes):
     return f"{round(size_in_mb)}MB"
 
 
-def generate_version_info(script_dir, setup_filename, current_version):
+def generate_version_info(project_root, setup_filename, current_version):
     """生成版本信息JSON - 只更新指定字段"""
     release_date = datetime.now().strftime("%Y-%m-%d")
-    setup_path = script_dir / "app" / setup_filename
+    setup_path = project_root / setup_filename
 
     size = "0MB"
     if setup_path.exists():
@@ -146,7 +157,7 @@ def generate_version_info(script_dir, setup_filename, current_version):
         "size": size,
     }
 
-    updates_dir = script_dir / "updates"
+    updates_dir = project_root / "updates"
     updates_dir.mkdir(exist_ok=True)
     version_file = updates_dir / "version.json"
 
@@ -180,21 +191,19 @@ def generate_version_info(script_dir, setup_filename, current_version):
     return existing_data
 
 
-def move_output_to_app(script_dir):
-    """将Output文件夹中的文件移动到app文件夹"""
-    output_dir = script_dir / "Output"
-    app_dir = script_dir / "app"
+def move_output_to_app(project_root):
+    """将Output文件夹中的文件移动到项目根目录"""
+    output_dir = project_root / "scripts" / "Output"
 
     if not output_dir.exists():
         print("警告：Output目录不存在")
         return None
 
-    app_dir.mkdir(exist_ok=True)
     setup_files = []
 
     for item in output_dir.iterdir():
         if item.is_file():
-            dest = app_dir / item.name
+            dest = project_root / item.name
             if dest.exists():
                 dest.unlink()
             shutil.move(str(item), str(dest))
@@ -239,9 +248,11 @@ def find_inno_compiler():
 def build_installer():
     """构建安装包"""
     script_dir = Path(__file__).parent.resolve()
+    project_root = script_dir.parent.resolve()
     print(f"脚本目录: {script_dir}")
+    print(f"项目根目录: {project_root}")
 
-    if not check_required_files(script_dir):
+    if not check_required_files(project_root):
         print("错误：缺少必要文件")
         return False
 
@@ -249,7 +260,7 @@ def build_installer():
     current_version = version
     print(f"当前版本: {current_version}")
 
-    app_dir = script_dir / "dist" / "BBH3ScanLaunch"
+    app_dir = project_root / "dist" / "BBH3ScanLaunch"
 
     inno_compiler = find_inno_compiler()
     if not inno_compiler:
@@ -257,10 +268,10 @@ def build_installer():
         return False
     print(f"找到编译器: {inno_compiler}")
 
-    iss_file = generate_iss_file(script_dir, current_version)
+    iss_file = generate_iss_file(project_root, current_version)
 
     try:
-        output_dir = script_dir / "Output"
+        output_dir = project_root / "scripts" / "Output"
         output_dir.mkdir(exist_ok=True)
 
         print("正在编译安装包...")
@@ -269,7 +280,7 @@ def build_installer():
             check=True,
             capture_output=True,
             text=True,
-            cwd=script_dir,
+            cwd=project_root / "scripts",
             encoding="utf-8",
         )
         print("编译完成")
@@ -280,12 +291,12 @@ def build_installer():
         except Exception as e:
             print(f"警告：删除临时ISS文件失败: {e}")
 
-        setup_filename = move_output_to_app(script_dir)
+        setup_filename = move_output_to_app(project_root)
         print(f"安装包文件名: {setup_filename}")
 
         if setup_filename:
             version_info = generate_version_info(
-                script_dir, setup_filename, current_version
+                project_root, setup_filename, current_version
             )
             if "app_info" in version_info:
                 print(f"安装包版本: {version_info['app_info']['version']}")

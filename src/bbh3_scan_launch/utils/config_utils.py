@@ -7,12 +7,12 @@ from json.decoder import JSONDecodeError
 
 # 优先导入全局实例，失败则回退到本地实例化，避免导入错误
 try:
-    from version_utils import version_manager
+    from .version_utils import version_manager
 except ImportError:
-    from version_utils import VersionManager
+    from .version_utils import VersionManager
 
     version_manager = VersionManager()
-from network_utils import network_manager  # 导入修改后的网络模块
+from .network_utils import network_manager  # 导入修改后的网络模块
 
 
 class ConfigManager:
@@ -54,7 +54,7 @@ class ConfigManager:
 
     def _load_config(self):
         """加载配置文件"""
-        config_path = "./config.json"
+        config_path = os.path.join(os.path.dirname(__file__), "..", "..", "..", "config", "config.json")
 
         # 如果配置文件不存在，创建默认配置
         if not os.path.isfile(config_path):
@@ -99,7 +99,9 @@ class ConfigManager:
                         config_temp[key] = old[key]
 
             # 写入配置文件
-            with open("./config.json", "w") as f:
+            config_path = os.path.join(os.path.dirname(__file__), "..", "..", "..", "config", "config.json")
+            os.makedirs(os.path.dirname(config_path), exist_ok=True)
+            with open(config_path, "w") as f:
                 json.dump(config_temp, f, indent=4, separators=(",", ": "))
             self.config = config_temp
 

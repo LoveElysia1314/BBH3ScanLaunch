@@ -35,7 +35,7 @@
    ```
 3. 运行程序：
    ```bash
-   python main.py
+   python run.py
    ```
 
 ### 从源码编译
@@ -45,7 +45,7 @@
    ```
 2. 打包为可执行文件：
    ```bash
-   python build.py
+   python scripts/build.py
    ```
    - 输出位置：`dist/` 目录。
    - 包含快捷方式：
@@ -72,12 +72,44 @@
      4. 完成后自动退出。
 
 ## 技术实现
+### 项目结构
+```
+BBH3ScanLaunch/
+├── src/
+│   └── bbh3_scan_launch/
+│       ├── __init__.py
+│       ├── main.py                    # 主程序入口，GUI事件处理
+│       ├── gui/
+│       │   ├── __init__.py
+│       │   └── main_window.py         # PySide6界面实现
+│       ├── core/
+│       │   ├── __init__.py
+│       │   ├── bh3_utils.py           # 图像处理/窗口操作核心
+│       │   └── sdk/
+│       │       ├── __init__.py
+│       │       ├── mihoyosdk.py       # 米哈游登录接口封装
+│       │       └── bsgamesdk.py       # B站登录接口封装
+│       └── utils/
+│           ├── __init__.py
+│           ├── config_utils.py        # 配置管理
+│           ├── network_utils.py       # 网络工具
+│           ├── version_utils.py       # 版本管理
+│           └── utils.py               # 通用工具
+├── resources/                        # 资源文件
+│   ├── pictures_to_match/            # 模板图片
+│   └── templates/                    # HTML模板
+├── config/                           # 配置文件
+│   └── config.json
+├── scripts/                          # 构建脚本
+│   ├── build.py
+│   └── build_installer.py
+├── tests/                            # 测试文件
+├── updates/                             # 文档
+├── run.py                            # 主入口文件
+└── requirements.txt
+```
+
 ### 核心模块
-| 模块 | 功能 |
-|------|------|
-| `main.py` | 主程序入口，GUI事件处理 |
-| `mainWindow.py` | PySide6界面实现 |
-| `bh3_utils.py` | 图像处理/窗口操作核心 |
 | `mihoyosdk.py` | 米哈游登录接口封装 |
 | `build.py` | 自动化构建脚本 |
 

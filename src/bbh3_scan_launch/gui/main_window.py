@@ -19,9 +19,9 @@ from PySide6.QtWidgets import (
 
 # 优先使用全局实例，若失败则本地实例化，避免导入错误
 try:
-    from version_utils import version_manager
+    from ..utils.version_utils import version_manager
 except ImportError:
-    from version_utils import VersionManager
+    from ..utils.version_utils import VersionManager
 
     version_manager = VersionManager()
 

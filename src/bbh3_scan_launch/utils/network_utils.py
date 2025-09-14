@@ -36,7 +36,7 @@ class SourceManager:
         source_priority=None,
         username="LoveElysia1314",
         repo="BBH3ScanLaunch",
-        branch="main",
+        branch="latest",
     ):
         """根据优先级生成不同源的完整 URL"""
         if source_priority is None:
