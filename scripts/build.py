@@ -9,7 +9,12 @@ import site
 site.ENABLE_USER_SITE = False
 
 sys.path.insert(0, str((Path(__file__).parent.parent / "src").resolve()))
-sys.path.insert(0, str((Path(__file__).parent.parent / "src" / "bbh3_scan_launch" / "utils").resolve()))
+sys.path.insert(
+    0,
+    str(
+        (Path(__file__).parent.parent / "src" / "bbh3_scan_launch" / "utils").resolve()
+    ),
+)
 from bbh3_scan_launch.utils.version_utils import version_manager
 
 version = version_manager.get_version_info("current")
@@ -62,7 +67,11 @@ def main():
     subprocess.run(pip_cmd, check=True)
 
     # 清理缓存
-    for cache_dir in [project_root / "__pycache__", project_root / "build", project_root / "dist"]:
+    for cache_dir in [
+        project_root / "__pycache__",
+        project_root / "build",
+        project_root / "dist",
+    ]:
         shutil.rmtree(cache_dir, ignore_errors=True)
 
     # 构建路径
@@ -139,8 +148,8 @@ def run_pyinstaller(script_dir, venv_dir, output_dir, tmpdir):
         str(output_dir),
         "--specpath",
         tmpdir,
-    "--paths",
-    str(script_dir / "src"),  # 关键：让 PyInstaller 能找到 src 包
+        "--paths",
+        str(script_dir / "src"),  # 关键：让 PyInstaller 能找到 src 包
         "--noconsole",
         "--uac-admin",
         "-i",
@@ -149,20 +158,20 @@ def run_pyinstaller(script_dir, venv_dir, output_dir, tmpdir):
         "PyQt5",
         "--exclude-module",
         "PyQt6",
-    # 确保分析阶段能解析到包和 GUI 依赖
-    "--hidden-import",
-    "bbh3_scan_launch",
-    "--hidden-import",
-    "bbh3_scan_launch.main",
+        # 确保分析阶段能解析到包和 GUI 依赖
+        "--hidden-import",
+        "bbh3_scan_launch",
+        "--hidden-import",
+        "bbh3_scan_launch.main",
         "--add-binary",
         f"{venv_dir / 'Lib' / 'site-packages' / 'pyzbar' / 'libiconv.dll'};.",
         "--add-binary",
         f"{venv_dir / 'Lib' / 'site-packages' / 'pyzbar' / 'libzbar-64.dll'};.",
-    "--add-data",
-    f"{(script_dir / 'resources' / 'templates').resolve()};resources\\templates",
-    "--add-data",
-    f"{(script_dir / 'resources' / 'pictures_to_match').resolve()};resources\\pictures_to_match",
-    str((script_dir / "run.py").resolve()),
+        "--add-data",
+        f"{(script_dir / 'resources' / 'templates').resolve()};resources\\templates",
+        "--add-data",
+        f"{(script_dir / 'resources' / 'pictures_to_match').resolve()};resources\\pictures_to_match",
+        str((script_dir / "run.py").resolve()),
     ]
 
     if USE_ONEFILE:
@@ -184,7 +193,10 @@ def copy_resources(project_root, app_dir):
     """复制所有资源文件（基于项目根目录）"""
     pairs = [
         (project_root / "resources" / "templates", app_dir / "resources" / "templates"),
-        (project_root / "resources" / "pictures_to_match", app_dir / "resources" / "pictures_to_match"),
+        (
+            project_root / "resources" / "pictures_to_match",
+            app_dir / "resources" / "pictures_to_match",
+        ),
         (project_root / "updates", app_dir / "updates"),
         (project_root / "BHimage.ico", app_dir / "BHimage.ico"),
     ]

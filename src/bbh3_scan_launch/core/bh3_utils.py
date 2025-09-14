@@ -15,7 +15,9 @@ import win32ui
 from .sdk import mihoyosdk
 
 # 常量定义
-TEMPLATE_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "..", "resources", "pictures_to_match")  # 模板图片目录
+TEMPLATE_DIR = os.path.join(
+    os.path.dirname(__file__), "..", "..", "..", "resources", "pictures_to_match"
+)  # 模板图片目录
 GAME_WINDOW_TITLE = "崩坏3"  # 游戏窗口标题
 
 

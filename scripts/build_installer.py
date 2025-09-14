@@ -8,7 +8,9 @@ from pathlib import Path
 
 # 导入版本管理（调整为相对导入）
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
-sys.path.insert(0, str(Path(__file__).parent.parent / "src" / "bbh3_scan_launch" / "utils"))
+sys.path.insert(
+    0, str(Path(__file__).parent.parent / "src" / "bbh3_scan_launch" / "utils")
+)
 from bbh3_scan_launch.utils.version_utils import version_manager
 
 version = version_manager.get_version_info("current")
@@ -97,7 +99,7 @@ end;
     iss_content = iss_content_template.format(
         version=current_version,
         icon_path=str(icon_path).replace("\\", "\\\\"),
-        dist_path=str(dist_path).replace("\\", "\\\\")
+        dist_path=str(dist_path).replace("\\", "\\\\"),
     )
 
     iss_file = project_root / "scripts" / "setup.iss"

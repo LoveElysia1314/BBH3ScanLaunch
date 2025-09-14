@@ -20,11 +20,15 @@ VersionKey = Literal["current", "remote", "default", "oa_versions", "all"]
 
 
 class VersionManager:
-    VERSION_CONFIG_PATH = os.path.join(os.path.dirname(__file__), "..", "..", "..", "updates", "version.json")
-    CHANGE_LOG_PATH = os.path.join(os.path.dirname(__file__), "..", "..", "..", "updates", "changelog.txt")
+    VERSION_CONFIG_PATH = os.path.join(
+        os.path.dirname(__file__), "..", "..", "..", "updates", "version.json"
+    )
+    CHANGE_LOG_PATH = os.path.join(
+        os.path.dirname(__file__), "..", "..", "..", "updates", "changelog.txt"
+    )
 
     # 类常量定义
-    CURRENT_VERSION = "1.3.1"  # 硬编码当前版本
+    CURRENT_VERSION = "1.3.2"  # 硬编码当前版本
     DEFAULT_VERSION = "0.0.0"  # 默认版本
     DEFAULT_OATOKEN = "e257aaa274fb2239094cbe64d9f5ee3e"  # v8.4版本的oa_token
     DEFAULT_BHVER = "8.4.0"  # 默认游戏版本号
@@ -46,7 +50,9 @@ class VersionManager:
             "oa_versions": self.oa_versions,
         }
 
-    def get_version_info(self, key: VersionKey) -> Union[str, dict[str, dict[str, str]]]:
+    def get_version_info(
+        self, key: VersionKey
+    ) -> Union[str, dict[str, dict[str, str]]]:
         """获取版本信息"""
         if key == "all":
             return self._version_info_cache
@@ -73,14 +79,15 @@ class VersionManager:
                     oa_versions = data.get("oa_versions", {})
                     if not oa_versions:
                         # 如果没有oa_versions，尝试从旧格式迁移
-                        oa_token = data.get("oa_info", {}).get("oa_token", self.DEFAULT_OATOKEN)
-                        bh_ver = data.get("oa_info", {}).get("bh_ver", self.DEFAULT_BHVER)
+                        oa_token = data.get("oa_info", {}).get(
+                            "oa_token", self.DEFAULT_OATOKEN
+                        )
+                        bh_ver = data.get("oa_info", {}).get(
+                            "bh_ver", self.DEFAULT_BHVER
+                        )
                         dispatch = data.get("dispatch", "")
                         oa_versions = {
-                            bh_ver: {
-                                "oa_token": oa_token,
-                                "dispatch": dispatch
-                            }
+                            bh_ver: {"oa_token": oa_token, "dispatch": dispatch}
                         }
                     return oa_versions
             return {}

@@ -26,7 +26,7 @@ class ConfigManager:
         "access_key": "",
         "uname": "",
         "last_login_succ": False,
-    "account_login": False,
+        "account_login": False,
         "clip_check": False,
         "auto_close": False,
         "auto_clip": False,
@@ -45,7 +45,7 @@ class ConfigManager:
         self.cap = None
         # 从权威源获取版本
         self.current_version = version_manager.get_version_info("current")
-        
+
         # 初始化 oa_token 和 bh_ver 属性
         self.oa_token = None
         self.bh_ver = None
@@ -54,7 +54,9 @@ class ConfigManager:
 
     def _load_config(self):
         """加载配置文件"""
-        config_path = os.path.join(os.path.dirname(__file__), "..", "..", "..", "config", "config.json")
+        config_path = os.path.join(
+            os.path.dirname(__file__), "..", "..", "..", "config", "config.json"
+        )
 
         # 如果配置文件不存在，创建默认配置
         if not os.path.isfile(config_path):
@@ -99,7 +101,9 @@ class ConfigManager:
                         config_temp[key] = old[key]
 
             # 写入配置文件
-            config_path = os.path.join(os.path.dirname(__file__), "..", "..", "..", "config", "config.json")
+            config_path = os.path.join(
+                os.path.dirname(__file__), "..", "..", "..", "config", "config.json"
+            )
             os.makedirs(os.path.dirname(config_path), exist_ok=True)
             with open(config_path, "w") as f:
                 json.dump(config_temp, f, indent=4, separators=(",", ": "))

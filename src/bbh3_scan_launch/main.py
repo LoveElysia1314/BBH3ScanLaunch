@@ -14,7 +14,11 @@ from PySide6.QtWidgets import QApplication, QMainWindow, QFileDialog, QMessageBo
 from .core.sdk import bsgamesdk
 from .core.sdk import mihoyosdk
 from .gui import main_window as mainWindow
-from .core.bh3_utils import image_processor, is_game_window_exist, click_center_of_game_window
+from .core.bh3_utils import (
+    image_processor,
+    is_game_window_exist,
+    click_center_of_game_window,
+)
 from .utils.utils import DummyWriter
 
 # ========== 初始化配置管理器和版本更新工具 ==========
@@ -305,6 +309,7 @@ class GuiHandler(logging.Handler):
         self.setFormatter(logging.Formatter("[%(levelname)s] %(message)s"))
         # 新增：重复日志过滤缓冲区，长度为3
         from collections import deque
+
         self._log_buffer = deque(maxlen=3)
         self.filter_enabled = True  # 可加配置开关
 
@@ -498,7 +503,9 @@ def main():
     config = config_manager.config
     # 根据配置切换日志级别（启用 DEBUG 时显示更多线程日志）
     root_logger = logging.getLogger()
-    root_logger.setLevel(logging.DEBUG if config.get("debug_print", False) else logging.INFO)
+    root_logger.setLevel(
+        logging.DEBUG if config.get("debug_print", False) else logging.INFO
+    )
 
     app = QApplication(sys.argv)
     window = SelfMainWindow()
@@ -510,7 +517,9 @@ def main():
 
     # Flask 应用设置
     # 计算模板文件夹路径（相对于_internal/的resources/templates文件夹）
-    template_dir = os.path.join(os.path.dirname(__file__), "..", "..", "resources", "templates")
+    template_dir = os.path.join(
+        os.path.dirname(__file__), "..", "..", "resources", "templates"
+    )
     fapp = Flask(__name__, template_folder=template_dir)
     # 禁用 Werkzeug 的日志
     log = logging.getLogger("werkzeug")
