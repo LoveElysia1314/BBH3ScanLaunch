@@ -36,7 +36,7 @@ class SourceManager:
         source_priority=None,
         username="LoveElysia1314",
         repo="BBH3ScanLaunch",
-        branch="latest",
+        branch="main",  # 修复：从 "latest" 改为 "main"，匹配实际仓库分支
     ):
         """根据优先级生成不同源的完整 URL"""
         if source_priority is None:
@@ -366,9 +366,11 @@ class NetworkManager:
         source_priority: Optional[List[str]] = None,
         strategy: str = "fastest",
     ) -> bool:
-        """探测多个源，选择最佳URL并用默认浏览器打开"""
-        # 确保有版本信息（以获取自定义源）
+        """探测多个源，选择最佳URL并用默认浏览器打开（异步版本）"""
+        # 如果没有版本信息，尝试快速获取（非阻塞）
         if not self.version_info:
+            logging.info("版本信息缺失，尝试快速获取...")
+            # 这里可以考虑异步获取，但为了简单，先尝试同步获取
             if not self.fetch_remote_files():
                 logging.error("无法获取版本信息，放弃自动选择下载源")
                 return False
@@ -380,7 +382,8 @@ class NetworkManager:
             logging.error("没有可用的候选下载链接")
             return False
 
-        sel = self.selector.select_best(candidates, strategy=strategy)
+        # 使用更短的超时时间，避免长时间阻塞
+        sel = self.selector.select_best(candidates, strategy=strategy, timeout=3.0)
         best = sel.get("best_url")
         if not best:
             logging.error("所有下载源均不可达，将尝试打开项目主页")
@@ -389,27 +392,14 @@ class NetworkManager:
                 webbrowser.open(
                     "https://github.com/LoveElysia1314/BBH3ScanLaunch/releases"
                 )
+                return True
             except Exception:
                 return False
-            return False
 
-        # 获取最终 URL 用于浏览器打开（处理重定向）
-        final_url = best
-        try:
-            resp = requests.head(
-                best,
-                timeout=5,
-                allow_redirects=True,
-                headers={"User-Agent": "Mozilla/5.0"},
-            )
-            if resp.status_code == 200:
-                final_url = resp.url
-        except Exception:
-            pass  # 如果获取失败，使用原始 URL
-
+        # 简化处理：直接使用最佳URL，跳过HEAD请求以减少阻塞
         logging.info(f"选择最佳下载源: {best}")
         try:
-            webbrowser.open(final_url)
+            webbrowser.open(best)
             return True
         except Exception as e:
             logging.error(f"无法打开浏览器: {str(e)}")

@@ -42,21 +42,83 @@ else:
     OA_TOKEN = "e257aaa274fb2239094cbe64d9f5ee3e"  # 默认token
 
 
+# ========== 更新下载线程 ==========
+class UpdateDownloadThread(QThread):
+    """后台线程：执行更新下载操作，避免阻塞主线程"""
+
+    update_status = Signal(str)  # 发送状态更新信号
+
+    def run(self):
+        try:
+            # 检查是否已被请求停止
+            if self.isInterruptionRequested():
+                return
+
+            self.update_status.emit("正在选择最佳下载源...")
+
+            # 执行下载源选择和浏览器打开操作
+            success = network_manager.open_best_download_in_browser(
+                package_name="BBH3ScanLaunch_Setup.exe",
+                tag="latest",
+                source_priority=["gitee", "github"],
+                strategy="fastest",
+            )
+
+            # 再次检查是否已被请求停止
+            if self.isInterruptionRequested():
+                return
+
+            if success:
+                self.update_status.emit("下载链接已打开，请在浏览器中下载")
+            else:
+                self.update_status.emit("无法打开下载链接，请手动访问项目发布页")
+
+        except Exception as e:
+            logging.error(f"更新下载失败: {e}")
+            self.update_status.emit("更新下载失败，请稍后重试")
+
+
 # ========== 更新检查线程 ==========
 class UpdateCheckThread(QThread):
     """后台线程：检查更新并发射结果信号"""
 
     update_result = Signal(bool, str)  # has_update, version_info
+    update_status = Signal(str)  # 发送状态更新信号
 
     def run(self):
         try:
-            has_update = version_manager.has_update()
-            if has_update:
-                latest_version = version_manager.get_version_info("remote")
-                self.update_result.emit(True, latest_version)
+            # 发送状态：开始检查更新
+            self.update_status.emit("正在获取远程版本信息...")
+
+            # 首先从网络获取最新的远程版本信息
+            from .utils.network_utils import network_manager
+            success = network_manager.fetch_remote_files()
+
+            if success:
+                self.update_status.emit("正在比较版本...")
+                # 更新版本管理器的缓存
+                version_manager.refresh_remote_version()
+                version_manager.refresh_oa_info()
+
+                # 现在检查更新
+                has_update = version_manager.has_update()
+                if has_update:
+                    latest_version = version_manager.get_version_info("remote")
+                    self.update_result.emit(True, latest_version)
+                else:
+                    current_version = version_manager.get_version_info("current")
+                    self.update_result.emit(False, current_version)
             else:
-                current_version = version_manager.get_version_info("current")
-                self.update_result.emit(False, current_version)
+                self.update_status.emit("获取远程版本失败，使用本地版本检查...")
+                # 如果网络获取失败，使用本地缓存检查
+                has_update = version_manager.has_update()
+                if has_update:
+                    latest_version = version_manager.get_version_info("remote")
+                    self.update_result.emit(True, latest_version)
+                else:
+                    current_version = version_manager.get_version_info("current")
+                    self.update_result.emit(False, current_version)
+
         except Exception as e:
             logging.error(f"更新检查失败: {e}")
             self.update_result.emit(False, "检查失败")
@@ -341,6 +403,9 @@ class SelfMainWindow(QMainWindow):
         # 初始化更新检查线程
         self.update_check_thread = UpdateCheckThread()
         self.update_check_thread.update_result.connect(self.on_update_check_finished)
+        self.update_check_thread.update_status.connect(self.on_update_status_changed)
+        # 初始化更新下载线程
+        self.update_download_thread = None
 
     def handle_login_complete(self, success):
         # 登录完成后，解析线程将在 start_parse_thread_after_login 中启动,这里只负责更新UI状态
@@ -444,6 +509,39 @@ class SelfMainWindow(QMainWindow):
             self.update_status_text(checkbox, prefix)
         logging.info("一键登陆模式已结束，恢复原始设置")
 
+    def on_update_status_changed(self, status):
+        """处理更新状态变化的槽函数"""
+        ui.updateStatusLabel.setText(status)
+        logging.info(f"更新状态: {status}")
+
+    def on_update_download_finished(self):
+        """处理更新下载线程完成"""
+        logging.info("更新下载线程已完成")
+        # 清理线程引用
+        if self.update_download_thread:
+            self.update_download_thread = None
+
+    def closeEvent(self, event):
+        """窗口关闭事件处理"""
+        logging.info("主窗口正在关闭，清理线程...")
+
+        # 停止更新检查线程
+        if hasattr(self, 'update_check_thread') and self.update_check_thread.isRunning():
+            logging.info("请求更新检查线程停止...")
+            self.update_check_thread.requestInterruption()
+            if not self.update_check_thread.wait(3000):  # 等待最多3秒
+                logging.warning("更新检查线程未能及时停止")
+
+        # 停止更新下载线程
+        if hasattr(self, 'update_download_thread') and self.update_download_thread and self.update_download_thread.isRunning():
+            logging.info("请求更新下载线程停止...")
+            self.update_download_thread.requestInterruption()
+            if not self.update_download_thread.wait(3000):  # 等待最多3秒
+                logging.warning("更新下载线程未能及时停止")
+
+        logging.info("线程清理完成")
+        event.accept()
+
     def on_update_check_finished(self, has_update, version_info):
         """处理更新检查结果的槽函数"""
         if has_update:
@@ -467,22 +565,28 @@ class SelfMainWindow(QMainWindow):
         # 重新创建线程以支持下次检查
         self.update_check_thread = UpdateCheckThread()
         self.update_check_thread.update_result.connect(self.on_update_check_finished)
+        self.update_check_thread.update_status.connect(self.on_update_status_changed)
 
     def check_and_display_updates(self):
         """启动后台线程检查更新并更新UI标签（用于程序初始化和手动检查）"""
         if self.update_check_thread.isRunning():
             return  # 如果线程正在运行，不重复启动
-        ui.updateStatusLabel.setText("正在检查更新...")
+        # 不再在这里设置初始状态，由线程内部的状态信号处理
         self.update_check_thread.start()
 
     def perform_update(self):
         """直接调用更新逻辑：自动择优源并在默认浏览器打开下载链接"""
-        network_manager.open_best_download_in_browser(
-            package_name="BBH3ScanLaunch_Setup.exe",
-            tag="latest",
-            source_priority=["gitee", "github"],
-            strategy="fastest",
-        )
+        # 检查是否已有下载线程在运行
+        if self.update_download_thread and self.update_download_thread.isRunning():
+            logging.info("更新下载线程正在运行中，请等待完成")
+            self.on_update_status_changed("请等待当前下载操作完成...")
+            return
+
+        # 创建新的下载线程
+        self.update_download_thread = UpdateDownloadThread()
+        self.update_download_thread.update_status.connect(self.on_update_status_changed)
+        self.update_download_thread.finished.connect(self.on_update_download_finished)
+        self.update_download_thread.start()
 
     def check_for_updates(self):
         """检查更新（用户手动触发）——不再弹窗，按钮状态将由 check_and_display_updates 决定"""
