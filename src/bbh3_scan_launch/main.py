@@ -460,16 +460,34 @@ class SelfMainWindow(QMainWindow):
         config = config_manager.config
         if config.get("game_path"):
             try:
-                subprocess.Popen([config["game_path"]])
+                # 启动游戏进程
+                proc = subprocess.Popen([config["game_path"]])
                 logging.info("正在启动崩坏3...")
+                # 提升进程优先级（仅限Windows）
+                try:
+                    import psutil
+                    import time
+                    # 等待进程启动，获取进程对象
+                    time.sleep(0.5)  # 稍微等待进程稳定
+                    p = psutil.Process(proc.pid)
+                    # 设置为高优先级（psutil.HIGH_PRIORITY_CLASS）
+                    p.nice(psutil.HIGH_PRIORITY_CLASS)
+                    logging.info("已将游戏进程优先级提升为高")
+                except Exception as e:
+                    logging.warning(f"提升进程优先级失败: {e}")
             except Exception as e:
                 logging.error(f"启动失败: {str(e)}")
         else:
             logging.info("请先配置游戏路径！")
             QMessageBox.warning(self, "路径未配置", "请先配置游戏路径！")
 
-    def oneClickLogin(self):
-        self.launchGame()
+    def oneClickLogin(self, skip_launch=False):
+        """
+        一键登录模式，支持跳过游戏启动（防止重复打开游戏）
+        :param skip_launch: 如果为 True，则不执行 launchGame
+        """
+        if not skip_launch:
+            self.launchGame()
         self.temp_mode = True
         config = config_manager.config
         for feature in [
@@ -619,57 +637,10 @@ def main():
     handler = GuiHandler(ui.logText)
     logging.getLogger().addHandler(handler)
 
-    # Flask 应用设置
-    # 计算模板文件夹路径（相对于_internal/的resources/templates文件夹）
-    template_dir = os.path.join(
-        os.path.dirname(__file__), "..", "..", "resources", "templates"
-    )
-    fapp = Flask(__name__, template_folder=template_dir)
-    # 禁用 Werkzeug 的日志
-    log = logging.getLogger("werkzeug")
-    log.setLevel(logging.ERROR)
-    # 禁用 Flask 的启动信息
-    cli = sys.modules["flask.cli"]
-    cli.show_server_banner = lambda *x: None
-
-    @fapp.route("/")
-    def index():
-        return render_template("index.html")
-
-    @fapp.route("/geetest")
-    def geetest():
-        return render_template("geetest.html")
-
-    @fapp.route("/ret", methods=["POST"])
-    def ret():
-        if not request.json:
-            logging.info("请求错误")
-            abort(400)
-        input_data = request.json
-        logging.debug(f"Input = {input_data}")
-        config_manager.cap = input_data
-        login_accept()
-        return "1"
-
-    flaskThread = Thread(
-        target=fapp.run,
-        daemon=True,
-        kwargs={
-            "host": "0.0.0.0",
-            "port": 12983,
-            "threaded": True,
-            "use_reloader": False,
-            "debug": False,
-        },
-    )
-    flaskThread.start()
-
-    # --- 在显示窗口前应用配置 ---
-    # 尝试自动登录
-    if config["account"]:
-        logging.info("配置文件已有账号，尝试登陆中...")
-        # 注意：此时UI控件已创建，可以安全调用
-        login_accept()
+    # 处理一键登陆参数（提前处理，防止阻塞）
+    if "--auto-login" in sys.argv:
+        QTimer.singleShot(100, lambda: window.oneClickLogin(skip_launch=False))
+        logging.info("检测到自动登陆参数，将启动一键登陆模式")
 
     # 应用配置到UI控件 (移到 setupUi 之后)
     for checkbox, feature, prefix in [
@@ -679,25 +650,69 @@ def main():
         (ui.autoClick, "auto_click", "当前状态"),
         (ui.debugPrint, "debug_print", "当前状态"),
     ]:
-        # 使用 config.get 并提供默认值 False，确保不会因键缺失出错
         checkbox.setChecked(config.get(feature, False))
         window.update_status_text(checkbox, prefix)
 
-    # 更新游戏路径按钮文本
     ui.configGamePathBtn.setText(
         "路径已配置" if config.get("game_path") else "点击配置"
     )
 
-    # 显示窗口
     window.show()
 
-    # 程序启动时自动检查更新（不弹窗）
-    window.check_and_display_updates()
+    # 自动检查更新异步执行（延迟1秒）
+    QTimer.singleShot(1000, window.check_and_display_updates)
 
-    # 处理命令行参数
-    if "--auto-login" in sys.argv:
-        QTimer.singleShot(100, window.oneClickLogin)
-        logging.info("检测到自动登陆参数，将启动一键登陆模式")
+    # 自动登录异步执行（延迟1.5秒，避免阻塞UI）
+    if config["account"]:
+        logging.info("配置文件已有账号，异步尝试登陆中...")
+        QTimer.singleShot(1500, login_accept)
+
+    # Flask服务按需启动：首次需要验证码时再启动
+    def start_flask_server():
+        template_dir = os.path.join(
+            os.path.dirname(__file__), "..", "..", "resources", "templates"
+        )
+        fapp = Flask(__name__, template_folder=template_dir)
+        log = logging.getLogger("werkzeug")
+        log.setLevel(logging.ERROR)
+        cli = sys.modules["flask.cli"]
+        cli.show_server_banner = lambda *x: None
+
+        @fapp.route("/")
+        def index():
+            return render_template("index.html")
+
+        @fapp.route("/geetest")
+        def geetest():
+            return render_template("geetest.html")
+
+        @fapp.route("/ret", methods=["POST"])
+        def ret():
+            if not request.json:
+                logging.info("请求错误")
+                abort(400)
+            input_data = request.json
+            logging.debug(f"Input = {input_data}")
+            config_manager.cap = input_data
+            login_accept()
+            return "1"
+
+        flaskThread = Thread(
+            target=fapp.run,
+            daemon=True,
+            kwargs={
+                "host": "0.0.0.0",
+                "port": 12983,
+                "threaded": True,
+                "use_reloader": False,
+                "debug": False,
+            },
+        )
+        flaskThread.start()
+        logging.info("Flask服务已启动")
+
+    # 提供全局按需启动入口
+    window.start_flask_server = start_flask_server
 
     sys.exit(app.exec())
 
