@@ -32,6 +32,7 @@ class ConfigManager:
         "auto_clip": False,
         "auto_click": False,
         "debug_print": False,
+        "download_priority": ["gitee", "github"],
         # 注意：oa_token 和 bh_ver 不再存储在 config.json 中，
         # 而是每次启动或检查更新时从 version.json 获取
     }

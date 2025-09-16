@@ -507,14 +507,14 @@ class SelfMainWindow(QMainWindow):
             config[feature] = True
         config_manager.write_conf(config)
         for checkbox, prefix in [
-            (ui.clipCheck, "当前状态"),
-            (ui.autoClip, "当前状态"),
-            (ui.autoClose, "当前状态"),
-            (ui.autoClick, "当前状态"),
+            (ui.clipCheck, "当前"),
+            (ui.autoClip, "当前"),
+            (ui.autoClose, "当前"),
+            (ui.autoClick, "当前"),
         ]:
             checkbox.setChecked(True)
             self.update_status_text(checkbox, prefix)
-        logging.info("一键登陆模式已启用")
+        logging.info("一键进入舰桥模式已启用")
 
     def restoreOriginalSettings(self):
         if not self.temp_mode:
@@ -524,14 +524,14 @@ class SelfMainWindow(QMainWindow):
             config[feature] = value
         config_manager.write_conf(config)
         for checkbox, feature, prefix in [
-            (ui.clipCheck, "clip_check", "当前状态"),
-            (ui.autoClip, "auto_clip", "当前状态"),
-            (ui.autoClose, "auto_close", "当前状态"),
-            (ui.autoClick, "auto_click", "当前状态"),
+            (ui.clipCheck, "clip_check", "当前"),
+            (ui.autoClip, "auto_clip", "当前"),
+            (ui.autoClose, "auto_close", "当前"),
+            (ui.autoClick, "auto_click", "当前"),
         ]:
             checkbox.setChecked(config.get(feature, False))
             self.update_status_text(checkbox, prefix)
-        logging.info("一键登陆模式已结束，恢复原始设置")
+        logging.info("一键进入舰桥模式已结束，恢复原始设置")
 
     def on_update_status_changed(self, status):
         """处理更新状态变化的槽函数"""
@@ -643,18 +643,18 @@ def main():
     handler = GuiHandler(ui.logText)
     logging.getLogger().addHandler(handler)
 
-    # 处理一键登陆参数（提前处理，防止阻塞）
+    # 处理一键进入舰桥参数（提前处理，防止阻塞）
     if "--auto-login" in sys.argv:
         QTimer.singleShot(100, lambda: window.oneClickLogin(skip_launch=False))
-        logging.info("检测到自动登陆参数，将启动一键登陆模式")
+        logging.info("检测到自动登陆参数，将启动一键进入舰桥模式")
 
     # 应用配置到UI控件 (移到 setupUi 之后)
     for checkbox, feature, prefix in [
-        (ui.clipCheck, "clip_check", "当前状态"),
-        (ui.autoClose, "auto_close", "当前状态"),
-        (ui.autoClip, "auto_clip", "当前状态"),
-        (ui.autoClick, "auto_click", "当前状态"),
-        (ui.debugPrint, "debug_print", "当前状态"),
+        (ui.clipCheck, "clip_check", "当前"),
+        (ui.autoClose, "auto_close", "当前"),
+        (ui.autoClip, "auto_clip", "当前"),
+        (ui.autoClick, "auto_click", "当前"),
+        (ui.debugPrint, "debug_print", "当前"),
     ]:
         checkbox.setChecked(config.get(feature, False))
         window.update_status_text(checkbox, prefix)

@@ -1,3 +1,18 @@
+v1.3.2.4
+发布日期：2025.9.16
+
+配置结构调整：
+- version.json 移除了 sources.config 字段（default_priority、auto_test_sources、test_timeout），新增 config.json 的 download_priority 字段。
+
+代码逻辑调整：
+- 网络相关类的下载源优先级获取改为从 config.json 读取。
+
+主窗口UI联动：
+- 下载源优先级控件与 config.json 实时同步。
+
+无用字段移除：
+- auto_test_sources 和 test_timeout 已彻底移除。
+
 v1.3.2.3
 发布日期：2025.9.16
 

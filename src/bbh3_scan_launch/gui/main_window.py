@@ -101,11 +101,14 @@ class Ui_MainWindow:
         self.create_features_group(right_layout)
         self.create_auto_login_group(right_layout)
 
-        # 添加关于组（移动到自动化组下方）
-        self.create_about_group(right_layout)
+        # 添加更新组（原关于组，移动到自动化组下方）
+        self.create_update_group(right_layout)
 
         # 添加到主布局
         self.mainLayout.addWidget(self.rightContainer)
+        # 设置左右栏宽度比例为5:3
+        self.mainLayout.setStretch(0, 5)  # 左侧
+        self.mainLayout.setStretch(1, 3)  # 右侧
         MainWindow.setCentralWidget(self.centralwidget)
 
         # 菜单栏
@@ -202,13 +205,13 @@ class Ui_MainWindow:
         layout.addWidget(self.featureGroup)
 
     def create_auto_login_group(self, layout):
-        """创建游戏启动和一键登录按钮区域"""
+        """创建游戏启动和一键登录按钮区域（并排显示）"""
         self.autoLoginGroup = QGroupBox("自动化")
-        autoLoginLayout = QVBoxLayout(self.autoLoginGroup)
+        autoLoginLayout = QHBoxLayout(self.autoLoginGroup)
         # 按钮配置
         buttons = [
             ("打开崩坏3", "launchGameBtn"),
-            ("一键登陆崩坏3", "oneClickLoginBtn"),
+            ("一键进入舰桥", "oneClickLoginBtn"),
         ]
         for btn_text, attr_name in buttons:
             btn = QPushButton(btn_text)
@@ -217,29 +220,55 @@ class Ui_MainWindow:
             autoLoginLayout.addWidget(btn)
         layout.addWidget(self.autoLoginGroup)
 
-    def create_about_group(self, layout):
-        """创建包含检查更新功能的'关于'组（简化版）"""
-        self.aboutGroup = QGroupBox("关于")
-        gridLayout = QGridLayout(self.aboutGroup)
-
-        # 只保留"检查更新"按钮
-        self.checkUpdateBtn = QPushButton("检查更新")
-        gridLayout.addWidget(self.checkUpdateBtn, 0, 0)
+    def create_update_group(self, layout):
+        """创建包含检查更新和下载源优先级调整控件的'更新'组"""
+        self.updateGroup = QGroupBox("更新")
+        gridLayout = QGridLayout(self.updateGroup)
 
         # 更新状态标签
         self.updateStatusLabel = QLabel(
             f"当前版本：{version_manager.get_version_info('current')}"
         )
         self.updateStatusLabel.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        gridLayout.addWidget(self.updateStatusLabel, 0, 1, 1, 2)  # 跨两列显示
+        gridLayout.addWidget(self.updateStatusLabel, 0, 0, 1, 1)
 
-        layout.addWidget(self.aboutGroup)
+        # 检查更新按钮
+        self.checkUpdateBtn = QPushButton("检查更新")
+        gridLayout.addWidget(self.checkUpdateBtn, 1, 0, 1, 1)
+
+        # 下载源优先级调整控件（标签在上，控件在下）
+        from PySide6.QtWidgets import QListWidget
+        label = QLabel("下载源优先级调整（拖拽排序）：")
+        gridLayout.addWidget(label, 2, 0, 1, 1)
+        self.sourceListWidget = QListWidget()
+        self.sourceListWidget.setDragDropMode(QListWidget.DragDropMode.InternalMove)
+        self.sourceListWidget.setSelectionMode(QListWidget.SelectionMode.SingleSelection)
+        # 读取config.json中的download_priority
+        try:
+            from ..utils.config_utils import config_manager
+            priority = config_manager.get_config("download_priority", ["gitee", "github"])
+        except Exception:
+            priority = ["gitee", "github"]
+        self.sourceListWidget.addItems(priority)
+        gridLayout.addWidget(self.sourceListWidget, 3, 0, 1, 1)
+
+        # 绑定顺序变化事件，自动写入config.json
+        def update_priority():
+            new_priority = [self.sourceListWidget.item(i).text() for i in range(self.sourceListWidget.count())]
+            try:
+                from ..utils.config_utils import config_manager
+                config_manager.set_config("download_priority", new_priority)
+            except Exception:
+                pass
+        self.sourceListWidget.model().rowsMoved.connect(update_priority)
+
+        layout.addWidget(self.updateGroup)
 
     def get_help_text(self):
         """返回程序使用说明的HTML格式文本"""
         return (
             "第一次使用需要点击登陆按钮登陆B站账号，账号密码会储存在配置文件内；<br>"
-            '第一次使用"一键登陆崩坏3"（需要以管理员身份运行）需要点击"配置路径"并选择"BH3.exe\；<br>'
+            '第一次使用"一键进入舰桥"（需要以管理员身份运行）需要点击"配置路径"并选择"BH3.exe\；<br>'
             '"BH3.exe"参考路径：C:\\miHoYo Launcher\\games\\Honkai Impact 3rd Game\\BH3.exe；<br>'
             "“解析二维码”会读取剪贴板中崩坏3登陆码并扫码；<br>"
             "“自动截屏”会自动截取崩坏3窗口，不论其在前台还是后台；<br>"
@@ -259,34 +288,34 @@ class Ui_MainWindow:
         self.loginBiliBtn.clicked.connect(MainWindow.login)
         self.clipCheck.clicked.connect(
             lambda checked: MainWindow.toggle_feature(
-                "clip_check", self.clipCheck, "当前状态"
+                "clip_check", self.clipCheck, "当前"
             )
         )
         self.autoClip.clicked.connect(
             lambda checked: MainWindow.toggle_feature(
-                "auto_clip", self.autoClip, "当前状态"
+                "auto_clip", self.autoClip, "当前"
             )
         )
         self.autoClose.clicked.connect(
             lambda checked: MainWindow.toggle_feature(
-                "auto_close", self.autoClose, "当前状态"
+                "auto_close", self.autoClose, "当前"
             )
         )
         self.autoClick.clicked.connect(
             lambda checked: MainWindow.toggle_feature(
-                "auto_click", self.autoClick, "当前状态"
+                "auto_click", self.autoClick, "当前"
             )
         )
         self.debugPrint.clicked.connect(
             lambda checked: MainWindow.toggle_feature(
-                "debug_print", self.debugPrint, "当前状态"
+                "debug_print", self.debugPrint, "当前"
             )
         )
         self.configGamePathBtn.clicked.connect(MainWindow.configGamePath)
         self.launchGameBtn.clicked.connect(MainWindow.launchGame)
         self.oneClickLoginBtn.clicked.connect(MainWindow.oneClickLogin)
 
-        # 连接关于组按钮信号
+        # 连接更新组按钮信号
         self.checkUpdateBtn.clicked.connect(MainWindow.check_for_updates)
 
 

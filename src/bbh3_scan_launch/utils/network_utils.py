@@ -28,12 +28,13 @@ class SourceManager:
         return sources.get(category, {})
 
     def get_priority_order(self) -> List[str]:
-        """获取源优先级顺序"""
-        if not self.version_info:
+        """获取源优先级顺序（从config.json读取）"""
+        try:
+            from .config_utils import config_manager
+            priority = config_manager.get_config("download_priority", ["gitee", "github"])
+            return priority if isinstance(priority, list) else ["gitee", "github"]
+        except Exception:
             return ["gitee", "github"]
-        
-        config = self.version_info.get("sources", {}).get("config", {})
-        return config.get("default_priority", ["gitee", "github"])
 
     def normalize_source_input(self, source_input):
         """标准化源输入，支持字符串或列表"""

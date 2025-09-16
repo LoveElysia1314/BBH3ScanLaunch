@@ -17,12 +17,8 @@
         "changelog": {
             "gitee": "https://gitee.com/LoveElysia1314/BBH3ScanLaunch/raw/main/updates/changelog.txt",
             "github": "https://raw.githubusercontent.com/LoveElysia1314/BBH3ScanLaunch/main/updates/changelog.txt"
-        },
-        "config": {
-            "default_priority": ["gitee", "github"],
-            "auto_test_sources": false,
-            "test_timeout": 3.0
         }
+        
     },
     "oa_versions": {
         "8.4.0": {
