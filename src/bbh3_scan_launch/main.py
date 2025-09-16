@@ -78,6 +78,30 @@ class UpdateDownloadThread(QThread):
             self.update_status.emit("更新下载失败，请稍后重试")
 
 
+# ========== 更新下载线程 ==========
+class UpdateDownloadThread(QThread):
+    """后台线程：处理更新下载"""
+
+    update_status = Signal(str)  # 发送状态更新信号
+
+    def run(self):
+        try:
+            self.update_status.emit("正在准备下载...")
+            from .utils.network_utils import network_manager
+            
+            # 尝试按优先级下载
+            success = network_manager.try_download_by_priority()
+            
+            if success:
+                self.update_status.emit("已在浏览器中打开下载链接")
+            else:
+                self.update_status.emit("所有下载源均不可用")
+                
+        except Exception as e:
+            logging.error(f"更新下载失败: {e}")
+            self.update_status.emit("下载失败")
+
+
 # ========== 更新检查线程 ==========
 class UpdateCheckThread(QThread):
     """后台线程：检查更新并发射结果信号"""
@@ -90,34 +114,16 @@ class UpdateCheckThread(QThread):
             # 发送状态：开始检查更新
             self.update_status.emit("正在获取远程版本信息...")
 
-            # 首先从网络获取最新的远程版本信息
-            from .utils.network_utils import network_manager
-            success = network_manager.fetch_remote_files()
+            # 使用新的网络管理器检查更新
+            from .utils.config_utils import config_manager
+            update_info = config_manager.check_program_update()
 
-            if success:
-                self.update_status.emit("正在比较版本...")
-                # 更新版本管理器的缓存
-                version_manager.refresh_remote_version()
-                version_manager.refresh_oa_info()
-
-                # 现在检查更新
-                has_update = version_manager.has_update()
-                if has_update:
-                    latest_version = version_manager.get_version_info("remote")
-                    self.update_result.emit(True, latest_version)
-                else:
-                    current_version = version_manager.get_version_info("current")
-                    self.update_result.emit(False, current_version)
+            if update_info.get("has_update"):
+                self.update_status.emit("发现新版本")
+                self.update_result.emit(True, update_info["remote_version"])
             else:
-                self.update_status.emit("获取远程版本失败，使用本地版本检查...")
-                # 如果网络获取失败，使用本地缓存检查
-                has_update = version_manager.has_update()
-                if has_update:
-                    latest_version = version_manager.get_version_info("remote")
-                    self.update_result.emit(True, latest_version)
-                else:
-                    current_version = version_manager.get_version_info("current")
-                    self.update_result.emit(False, current_version)
+                self.update_status.emit("当前已是最新版本")
+                self.update_result.emit(False, update_info.get("current_version", "未知"))
 
         except Exception as e:
             logging.error(f"更新检查失败: {e}")

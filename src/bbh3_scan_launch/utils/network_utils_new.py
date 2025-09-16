@@ -51,25 +51,6 @@ class NetworkManager:
     def __init__(self):
         self.source_manager = SourceManager()
         self.version_info = None
-        # 启动时先加载本地版本信息作为配置基础
-        self._load_local_version_info()
-
-    def _load_local_version_info(self):
-        """加载本地打包的version.json作为配置基础"""
-        try:
-            local_version_path = os.path.join(
-                os.path.dirname(__file__), "..", "..", "..", "updates", "version.json"
-            )
-            if os.path.exists(local_version_path):
-                with open(local_version_path, 'r', encoding='utf-8') as f:
-                    local_version_info = json.load(f)
-                    # 将本地版本信息作为配置基础加载到源管理器
-                    self.source_manager.load_version_info(local_version_info)
-                    logging.debug("已加载本地版本配置")
-                    return local_version_info
-        except Exception as e:
-            logging.warning(f"加载本地版本配置失败: {e}")
-        return None
 
     def fetch_from_source(self, url, timeout=5):
         """从单个源获取数据"""
@@ -102,51 +83,36 @@ class NetworkManager:
     def fetch_remote_files(self, source=None):
         """从远程获取version.json和changelog.txt"""
         try:
+            # 这是一个特殊方法，只用于获取version.json本身
+            # 因为没有version.json就无法获取源配置，所以这里使用硬编码的获取逻辑
             source_priority = self.source_manager.normalize_source_input(source)
             
-            # 优先尝试使用本地配置中的version_url源
+            # 硬编码的version.json获取地址（唯一保留的拼接逻辑）
             version_urls = []
-            version_sources = self.source_manager.get_links_by_category("version_url")
-            
-            if version_sources:
-                # 使用本地配置中的源
-                for source_name in source_priority:
-                    if source_name in version_sources:
-                        version_urls.append({
-                            "name": source_name,
-                            "url": version_sources[source_name],
-                            "type": "configured"
-                        })
-                logging.debug("使用本地配置的version.json获取源")
-            else:
-                # 回退到硬编码源（兜底逻辑）
-                logging.warning("本地配置中无version_url源，使用硬编码回退逻辑")
-                for source_name in source_priority:
-                    if source_name == "gitee":
-                        version_urls.append({
-                            "name": "gitee",
-                            "url": "https://gitee.com/LoveElysia1314/BBH3ScanLaunch/raw/main/updates/version.json",
-                            "type": "hardcoded"
-                        })
-                    elif source_name == "github":
-                        version_urls.append({
-                            "name": "github", 
-                            "url": "https://raw.githubusercontent.com/LoveElysia1314/BBH3ScanLaunch/main/updates/version.json",
-                            "type": "hardcoded"
-                        })
+            for source_name in source_priority:
+                if source_name == "gitee":
+                    version_urls.append({
+                        "name": "gitee",
+                        "url": "https://gitee.com/LoveElysia1314/BBH3ScanLaunch/raw/main/updates/version.json",
+                        "type": "hardcoded"
+                    })
+                elif source_name == "github":
+                    version_urls.append({
+                        "name": "github", 
+                        "url": "https://raw.githubusercontent.com/LoveElysia1314/BBH3ScanLaunch/main/updates/version.json",
+                        "type": "hardcoded"
+                    })
 
-            # 获取远程version.json
+            # 获取version.json
             for source_info in version_urls:
                 result = self.fetch_from_source(source_info["url"], timeout=10)
                 if result and result["success"]:
                     self.version_info = json.loads(result["text"])
-                    # 更新源管理器的配置（使用最新的远程配置）
                     self.source_manager.load_version_info(self.version_info)
                     self.save_to_local(result["text"], "updates/version.json")
-                    logging.info(f"成功从 {source_info['name']} 获取远程版本信息 ({source_info['type']})")
                     break
 
-            # 获取changelog.txt（使用最新的配置）
+            # 获取changelog.txt（使用version.json中的链接）
             if self.version_info:
                 changelog_links = self.source_manager.get_links_by_category("changelog")
                 for source_name in source_priority:
@@ -155,7 +121,6 @@ class NetworkManager:
                         result = self.fetch_from_source(url, timeout=10)
                         if result and result["success"]:
                             self.save_to_local(result["text"], "updates/changelog.txt")
-                            logging.info(f"成功从 {source_name} 获取changelog")
                             break
 
             return True

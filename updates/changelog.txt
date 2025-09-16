@@ -1,3 +1,25 @@
+v1.3.2.3
+发布日期：2025.9.16
+
+更新机制重构：
+- 所有下载链接、changelog、version.json 链接均已写入 version.json，完全移除动态 URL 构造逻辑。
+- 新增本地配置优先，硬编码 URL 兜底的混合获取逻辑，提升鲁棒性。
+- 用户可自定义源优先级，自动检测源功能已移除，按优先级顺序尝试下载。
+- main.py、config_utils.py、network_utils.py 相关更新检查与下载逻辑全部重构，统一走配置化流程。
+
+代码结构优化：
+- 移除 MultiSourceSelector、LinkProber 等自动探测相关类。
+- SourceManager 仅负责 version.json 配置解析，简化源管理逻辑。
+- NetworkManager 支持本地配置加载、远程配置刷新，所有链接均从配置读取。
+
+版本号与配置调整：
+- version.json 新增 version_url、download_url、changelog 配置项，所有链接均硬编码。
+- 默认源优先级为 gitee > github，可在 version.json 中自定义。
+
+其他说明：
+- 变动涉及 main.py、config_utils.py、network_utils.py、version_utils.py、version.json、changelog.txt 等文件。
+- 旧逻辑已彻底移除，更新流程更清晰，维护性更高。
+
 v1.3.2.2
 发布日期：2025.9.15
 
