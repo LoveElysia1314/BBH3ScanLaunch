@@ -66,31 +66,48 @@ class ConfigManager:
 
         self.config = self._load_config()
 
-    @handle_exceptions("配置文件加载失败", None)
     def _load_config(self):
         """加载配置文件"""
         config_path = CONFIG_FILE_PATH
 
-        with open(config_path) as fp:
-            loaded_config = json.load(fp)
+        try:
+            with open(config_path) as fp:
+                loaded_config = json.load(fp)
 
-            # 提取有效字段（只保留在DEFAULT_CONFIG中存在的键）
-            valid_config = {}
-            for key in self.DEFAULT_CONFIG:
-                if key in loaded_config:
-                    valid_config[key] = loaded_config[key]
+                # 提取有效字段（只保留在DEFAULT_CONFIG中存在的键）
+                valid_config = {}
+                for key in self.DEFAULT_CONFIG:
+                    if key in loaded_config:
+                        valid_config[key] = loaded_config[key]
 
-            # 合并有效字段和默认配置
-            merged_config = self.DEFAULT_CONFIG.copy()
-            merged_config.update(valid_config)
+                # 合并有效字段和默认配置
+                merged_config = self.DEFAULT_CONFIG.copy()
+                merged_config.update(valid_config)
 
-            # 如果原始配置有无效字段，更新文件
-            if loaded_config != merged_config:
-                logging.info("配置文件包含无效字段，正在优化...")
-                with open(config_path, "w") as f:
-                    json.dump(merged_config, f, indent=4)
+                # 如果原始配置有无效字段，更新文件
+                if loaded_config != merged_config:
+                    logging.info("配置文件包含无效字段，正在优化...")
+                    with open(config_path, "w") as f:
+                        json.dump(merged_config, f, indent=4)
 
-            return merged_config
+                return merged_config
+        except FileNotFoundError:
+            # 如果配置文件不存在，创建默认配置文件
+            logging.info("配置文件不存在，正在创建默认配置...")
+            os.makedirs(os.path.dirname(config_path), exist_ok=True)
+            with open(config_path, "w") as f:
+                json.dump(self.DEFAULT_CONFIG, f, indent=4)
+            return self.DEFAULT_CONFIG.copy()
+        except JSONDecodeError as e:
+            # 如果JSON格式错误，备份原文件并创建默认配置
+            logging.warning(f"配置文件JSON格式错误: {e}，正在创建默认配置...")
+            backup_path = config_path + ".backup"
+            if os.path.exists(config_path):
+                os.rename(config_path, backup_path)
+                logging.info(f"原配置文件已备份到: {backup_path}")
+            with open(config_path, "w") as f:
+                json.dump(self.DEFAULT_CONFIG, f, indent=4)
+            return self.DEFAULT_CONFIG.copy()
 
     def write_conf(self, old=None):
         """写入配置文件"""
@@ -161,8 +178,10 @@ class ConfigManager:
         )
 
         if should_update_files:
-            # 更新本地文件
-            if not _get_network_manager().fetch_remote_files(source=source):
+            # 更新本地文件（仅在远程版本号大于等于本地时才更新version.json和changelog）
+            if not _get_network_manager().fetch_remote_files(
+                source=source, should_update_files=True
+            ):
                 return {"has_update": False, "error": "无法更新本地文件"}
 
             # 获取下载链接

@@ -151,8 +151,8 @@ class NetworkManager:
             logging.error(f"获取远程版本信息失败: {str(e)}")
             return None
 
-    def fetch_remote_files(self, source=None):
-        """从远程获取version.json和changelog.txt"""
+    def fetch_remote_files(self, source=None, should_update_files=True):
+        """从远程获取version.json和changelog.txt（仅在should_update_files为True时才更新）"""
         try:
             source_priority = self.source_manager.normalize_source_input(source)
 
@@ -200,14 +200,15 @@ class NetworkManager:
                     self.version_info = json.loads(result["text"])
                     # 更新源管理器的配置（使用最新的远程配置）
                     self.source_manager.load_version_info(self.version_info)
-                    self.save_to_local(result["text"], "updates/version.json")
-                    logging.info(
-                        f"成功从 {source_info['name']} 获取远程版本信息 ({source_info['type']})"
-                    )
+                    if should_update_files:
+                        self.save_to_local(result["text"], "updates/version.json")
+                        logging.info(
+                            f"成功从 {source_info['name']} 获取远程版本信息 ({source_info['type']})"
+                        )
                     break
 
-            # 获取changelog.txt（使用最新的配置）
-            if self.version_info:
+            # 获取changelog.txt（仅在should_update_files为True时才更新）
+            if should_update_files and self.version_info:
                 changelog_links = self.source_manager.get_links_by_category("changelog")
                 for source_name in source_priority:
                     if source_name in changelog_links:

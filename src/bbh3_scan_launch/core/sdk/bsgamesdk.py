@@ -49,6 +49,10 @@ async def sendBiliPost(url, data):
             logging.error(f"B站POST请求失败: 响应不是有效JSON - {json_err}")
             logging.error(f"响应内容: {res.text[:500]}...")  # 记录前500字符
             return None
+    except requests.exceptions.SSLError as ssl_err:
+        logging.error(f"B站POST请求失败: SSL连接错误 - {ssl_err}")
+        # 返回特殊的错误信息，表示需要重新登录
+        return {"ssl_error": True, "message": "SSL连接失败，请检查网络连接或重新登录"}
     except Exception as e:
         logging.error(f"B站POST请求失败: {e}")
         return None
@@ -159,11 +163,23 @@ async def login(bili_account, bili_pwd, cap=None):
         )
     else:
         login_sta = await login1(bili_account, bili_pwd)
+
+    # 检查是否是SSL错误
+    if login_sta and login_sta.get("ssl_error"):
+        logging.error("登录失败: SSL连接错误")
+        return {"ssl_error": True, "message": "网络连接异常，请重新登录"}
+
     if "access_key" not in login_sta:
         cap_data = await captcha()
+        # 检查验证码获取是否也遇到SSL错误
+        if cap_data and cap_data.get("ssl_error"):
+            logging.error("获取验证码失败: SSL连接错误")
+            return {"ssl_error": True, "message": "网络连接异常，无法获取验证码"}
+
         login_sta["cap_url"] = make_captch(
             cap_data["gt"], cap_data["challenge"], cap_data["gt_user_id"]
         )
+        login_sta["need_captch"] = True
         logging.info("登录失败，可能需要验证码")
         logging.debug(f"登录状态: {login_sta}")
     return login_sta

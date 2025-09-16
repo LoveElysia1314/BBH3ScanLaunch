@@ -126,6 +126,33 @@ class LoginThread(QThread):
                     }
                 )
                 config_manager.write_conf(config)
+                # 缓存验证失败后，重新进行完整登录流程
+                logging.info(f"重新登陆B站账号 {config['account']} 中...")
+                bs_info = await bsgamesdk.login(
+                    config["account"], config["password"], config_manager.cap
+                )
+                if not bs_info or "access_key" not in bs_info:
+                    self.handle_login_failure(bs_info or {})
+                    # 发出信号，即使失败也要通知主线程登录流程结束
+                    self.login_complete.emit(False)
+                    return
+                bs_user_info = await bsgamesdk.getUserInfo(
+                    bs_info["uid"], bs_info["access_key"]
+                )
+                if not bs_user_info or "uname" not in bs_user_info:
+                    logging.error("获取用户信息失败")
+                    self.login_complete.emit(False)
+                    return
+                logging.info(f"重新登陆B站账号 {bs_user_info['uname']} 成功！")
+                config.update(
+                    {
+                        "uid": bs_info["uid"],
+                        "access_key": bs_info["access_key"],
+                        "last_login_succ": True,
+                        "uname": bs_user_info["uname"],
+                    }
+                )
+                config_manager.write_conf(config)
         else:
             logging.info(f"登陆B站账号 {config['account']} 中...")
             bs_info = await bsgamesdk.login(
@@ -199,6 +226,35 @@ class LoginThread(QThread):
         self.login_complete.emit(True)
 
     def handle_login_failure(self, bs_info):
+        # 如果使用了验证码但仍然登录失败，说明验证码正确但账号密码错误
+        if config_manager.cap is not None and "access_key" not in bs_info:
+            logging.info("验证码验证成功，但账号或密码错误！")
+            # 清空验证码，避免无限循环
+            config_manager.cap = None
+            # 重新弹出登录框
+            self.login()
+            return
+
+        if bs_info.get("ssl_error"):
+            logging.error("网络连接异常，清空账号信息并弹出登录框")
+            # 清空账号密码
+            config = config_manager.config
+            config.update(
+                {
+                    "account": "",
+                    "password": "",
+                    "last_login_succ": False,
+                    "uid": "",
+                    "access_key": "",
+                    "uname": "",
+                    "account_login": False,
+                }
+            )
+            config_manager.write_conf(config)
+            # 弹出登录框
+            self.login()
+            return
+
         if "message" in bs_info:
             logging.info("登陆失败！")
             if bs_info["message"] == "PWD_INVALID":
@@ -370,19 +426,26 @@ class SelfMainWindow(QMainWindow):
         # 初始化更新下载线程
         self.update_download_thread = None
 
+    def reset_login_button(self):
+        """重置登录按钮状态"""
+        ui.loginBiliBtn.setText("点击登陆")
+        ui.loginBiliBtn.setDisabled(False)
+        ui.loginBiliBtn.setDown(False)
+
     def handle_login_complete(self, success):
         # 登录完成后，解析线程将在 start_parse_thread_after_login 中启动,这里只负责更新UI状态
-        status = "账号已登陆" if success else "登陆失败"
-        ui.loginBiliBtn.setText(status)
+        if success:
+            status = "账号已登陆"
+            ui.loginBiliBtn.setText(status)
+        else:
+            status = "点击登陆"
+            ui.loginBiliBtn.setText(status)
         ui.loginBiliBtn.setDisabled(False)
+        ui.loginBiliBtn.setDown(False)  # 确保按钮不会保持按下状态
         # print(f"[INFO] 登录UI状态已更新为: {status}")
 
     def login(self):
         config = config_manager.config
-        if config.get("account_login", False):
-            logging.info("账号已登陆")
-            ui.loginBiliBtn.setText("账号已登陆")
-            return
         logging.info("开始登陆账号")
         ui.loginBiliBtn.setText("登陆中")
         ui.loginBiliBtn.setDisabled(True)
@@ -665,6 +728,12 @@ def main():
     ui.configGamePathBtn.setText(
         "路径已配置" if config.get("game_path") else "点击配置"
     )
+
+    # 初始化登录按钮状态
+    if config.get("account_login", False):
+        ui.loginBiliBtn.setText("账号已登陆")
+    else:
+        ui.loginBiliBtn.setText("点击登陆")
 
     # 显示窗口
     window.show()

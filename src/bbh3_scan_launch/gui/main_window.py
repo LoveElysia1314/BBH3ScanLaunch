@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+import logging
 from PySide6.QtCore import Qt, QMetaObject, QCoreApplication
 from PySide6.QtWidgets import (
     QDialog,
@@ -49,6 +50,36 @@ class LoginDialog(QDialog):
         main_layout.addWidget(buttons)
 
         self.adjustSize()
+
+        # 预填账号密码
+        self.prefill_credentials()
+
+    def prefill_credentials(self):
+        """预填账号密码"""
+        try:
+            from ..utils.config_utils import config_manager
+
+            config = config_manager.config
+            if config.get("account"):
+                self.account.setText(config["account"])
+            if config.get("password"):
+                self.password.setText(config["password"])
+        except Exception as e:
+            logging.warning(f"预填账号密码失败: {e}")
+
+    def reject(self):
+        """重写reject方法，确保关闭对话框时重置按钮状态"""
+        # 重置登录按钮状态
+        if hasattr(self.parent(), "reset_login_button"):
+            self.parent().reset_login_button()
+        super().reject()
+
+    def closeEvent(self, event):
+        """处理窗口关闭事件"""
+        # 重置登录按钮状态
+        if hasattr(self.parent(), "reset_login_button"):
+            self.parent().reset_login_button()
+        super().closeEvent(event)
 
     def create_form_controls(self, layout):
         """创建账号密码输入表单控件"""
