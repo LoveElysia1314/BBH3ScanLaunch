@@ -4,15 +4,30 @@ import os
 import threading
 import logging
 from json.decoder import JSONDecodeError
+from ..constants import CONFIG_FILE_PATH
+from .exception_utils import handle_exceptions
 
-# 优先导入全局实例，失败则回退到本地实例化，避免导入错误
-try:
-    from .version_utils import version_manager
-except ImportError:
-    from .version_utils import VersionManager
+# 延迟导入，避免循环依赖
+_version_manager = None
+_network_manager = None
 
-    version_manager = VersionManager()
-from .network_utils import network_manager  # 导入修改后的网络模块
+
+def _get_version_manager():
+    global _version_manager
+    if _version_manager is None:
+        from .version_utils import version_manager
+
+        _version_manager = version_manager
+    return _version_manager
+
+
+def _get_network_manager():
+    global _network_manager
+    if _network_manager is None:
+        from .network_utils import network_manager
+
+        _network_manager = network_manager
+    return _network_manager
 
 
 class ConfigManager:
@@ -43,7 +58,7 @@ class ConfigManager:
         self.data = {}
         self.cap = None
         # 从权威源获取版本
-        self.current_version = version_manager.get_version_info("current")
+        self.current_version = _get_version_manager().get_version_info("current")
 
         # 初始化 oa_token 和 bh_ver 属性
         self.oa_token = None
@@ -51,38 +66,31 @@ class ConfigManager:
 
         self.config = self._load_config()
 
+    @handle_exceptions("配置文件加载失败", None)
     def _load_config(self):
         """加载配置文件"""
-        config_path = os.path.join(
-            os.path.dirname(__file__), "..", "..", "..", "config", "config.json"
-        )
+        config_path = CONFIG_FILE_PATH
 
-        try:
-            with open(config_path) as fp:
-                loaded_config = json.load(fp)
+        with open(config_path) as fp:
+            loaded_config = json.load(fp)
 
-                # 提取有效字段（只保留在DEFAULT_CONFIG中存在的键）
-                valid_config = {}
-                for key in self.DEFAULT_CONFIG:
-                    if key in loaded_config:
-                        valid_config[key] = loaded_config[key]
+            # 提取有效字段（只保留在DEFAULT_CONFIG中存在的键）
+            valid_config = {}
+            for key in self.DEFAULT_CONFIG:
+                if key in loaded_config:
+                    valid_config[key] = loaded_config[key]
 
-                # 合并有效字段和默认配置
-                merged_config = self.DEFAULT_CONFIG.copy()
-                merged_config.update(valid_config)
+            # 合并有效字段和默认配置
+            merged_config = self.DEFAULT_CONFIG.copy()
+            merged_config.update(valid_config)
 
-                # 如果原始配置有无效字段，更新文件
-                if loaded_config != merged_config:
-                    logging.info("配置文件包含无效字段，正在优化...")
-                    with open(config_path, "w") as f:
-                        json.dump(merged_config, f, indent=4)
+            # 如果原始配置有无效字段，更新文件
+            if loaded_config != merged_config:
+                logging.info("配置文件包含无效字段，正在优化...")
+                with open(config_path, "w") as f:
+                    json.dump(merged_config, f, indent=4)
 
-                return merged_config
-
-        except (JSONDecodeError, FileNotFoundError) as e:
-            logging.warning(f"配置文件错误: {e}，使用默认配置")
-            self.write_conf()
-            return self.DEFAULT_CONFIG.copy()
+            return merged_config
 
     def write_conf(self, old=None):
         """写入配置文件"""
@@ -95,9 +103,7 @@ class ConfigManager:
                         config_temp[key] = old[key]
 
             # 写入配置文件
-            config_path = os.path.join(
-                os.path.dirname(__file__), "..", "..", "..", "config", "config.json"
-            )
+            config_path = CONFIG_FILE_PATH
             os.makedirs(os.path.dirname(config_path), exist_ok=True)
             with open(config_path, "w") as f:
                 json.dump(config_temp, f, indent=4, separators=(",", ": "))
@@ -127,12 +133,14 @@ class ConfigManager:
         可以传递 source 参数来指定版本信息和文件的来源。
         """
         # 获取远程版本信息（不保存文件）
-        remote_version_info = network_manager.get_remote_version_info(source=source)
+        remote_version_info = _get_network_manager().get_remote_version_info(
+            source=source
+        )
         if not remote_version_info:
             return {"has_update": False, "error": "无法获取远程版本信息"}
 
         # 比较版本
-        current_version = version_manager.get_version_info("current")
+        current_version = _get_version_manager().get_version_info("current")
         remote_version = remote_version_info.get("app_info", {}).get("version", "0.0.0")
 
         # 简单版本比较
@@ -154,16 +162,18 @@ class ConfigManager:
 
         if should_update_files:
             # 更新本地文件
-            if not network_manager.fetch_remote_files(source=source):
+            if not _get_network_manager().fetch_remote_files(source=source):
                 return {"has_update": False, "error": "无法更新本地文件"}
 
             # 获取下载链接
-            download_links = network_manager.source_manager.get_links_by_category(
-                "download_url"
+            download_links = (
+                _get_network_manager().source_manager.get_links_by_category(
+                    "download_url"
+                )
             )
             if download_links:
                 # 返回第一个可用的下载链接
-                priority = network_manager.source_manager.get_priority_order()
+                priority = _get_network_manager().source_manager.get_priority_order()
                 for source_name in priority:
                     if source_name in download_links:
                         result["download_url"] = download_links[source_name]

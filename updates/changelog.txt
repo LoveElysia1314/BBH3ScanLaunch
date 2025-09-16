@@ -1,3 +1,16 @@
+v1.3.3.2
+发布日期：2025.9.16
+
+代码优化：
+- 常量集中管理：新建constants.py文件，集中管理GAME_WINDOW_TITLE、TEMPLATE_PICTURES_DIR、TEMPLATE_WEB_DIR等常量，避免硬编码和重复定义。
+- 异常处理统一：创建exception_utils.py，提供统一的异常处理装饰器，支持同步和异步函数，替换多个文件中的try-except块，提升代码一致性和维护性。
+- 重复导入优化：创建dependency_container.py依赖注入容器，消除main.py、gui/main_window.py等文件中的重复导入语句，降低耦合度。
+
+BUG修复：
+- 修复异步装饰器兼容性问题：handle_exceptions装饰器现已支持异步函数，修复LoginThread.login()等异步方法使用装饰器时的运行时错误。
+- 修复循环导入问题：解决dependency_container.py与config_utils.py之间的循环依赖，通过延迟加载机制消除模块间循环引用。
+- 改进依赖注入容器稳定性：为所有依赖注入函数添加错误处理和回退机制，确保容器初始化失败时程序仍能正常运行。
+
 v1.3.3.1
 发布日期：2025.9.16
 

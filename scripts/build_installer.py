@@ -12,7 +12,9 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 sys.path.insert(
     0, str(Path(__file__).parent.parent / "src" / "bbh3_scan_launch" / "utils")
 )
-from bbh3_scan_launch.utils.version_utils import version_manager
+from bbh3_scan_launch.dependency_container import get_version_manager
+
+version_manager = get_version_manager()
 
 version = version_manager.get_version_info("current")
 

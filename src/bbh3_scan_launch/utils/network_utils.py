@@ -6,6 +6,8 @@ import json
 import logging
 import time
 from typing import List, Dict
+from ..constants import VERSION_FILE_PATH
+from .exception_utils import handle_exceptions
 
 
 class SourceManager:
@@ -26,17 +28,14 @@ class SourceManager:
         sources = self.version_info.get("sources", {})
         return sources.get(category, {})
 
+    @handle_exceptions("获取下载优先级失败", ["gitee", "github"])
     def get_priority_order(self) -> List[str]:
         """获取源优先级顺序（从config.json读取）"""
-        try:
-            from .config_utils import config_manager
+        from ..dependency_container import get_config_manager
 
-            priority = config_manager.get_config(
-                "download_priority", ["gitee", "github"]
-            )
-            return priority if isinstance(priority, list) else ["gitee", "github"]
-        except Exception:
-            return ["gitee", "github"]
+        config_manager = get_config_manager()
+        priority = config_manager.get_config("download_priority", ["gitee", "github"])
+        return priority if isinstance(priority, list) else ["gitee", "github"]
 
     def normalize_source_input(self, source_input):
         """标准化源输入，支持字符串或列表"""
@@ -57,38 +56,32 @@ class NetworkManager:
         # 启动时先加载本地版本信息作为配置基础
         self._load_local_version_info()
 
+    @handle_exceptions("加载本地版本配置失败", None)
     def _load_local_version_info(self):
         """加载本地打包的version.json作为配置基础"""
-        try:
-            local_version_path = os.path.join(
-                os.path.dirname(__file__), "..", "..", "..", "updates", "version.json"
-            )
-            if os.path.exists(local_version_path):
-                with open(local_version_path, "r", encoding="utf-8") as f:
-                    local_version_info = json.load(f)
-                    # 将本地版本信息作为配置基础加载到源管理器
-                    self.source_manager.load_version_info(local_version_info)
-                    logging.debug("已加载本地版本配置")
-                    return local_version_info
-        except Exception as e:
-            logging.warning(f"加载本地版本配置失败: {e}")
+        local_version_path = VERSION_FILE_PATH
+        if os.path.exists(local_version_path):
+            with open(local_version_path, "r", encoding="utf-8") as f:
+                local_version_info = json.load(f)
+                # 将本地版本信息作为配置基础加载到源管理器
+                self.source_manager.load_version_info(local_version_info)
+                logging.debug("已加载本地版本配置")
+                return local_version_info
         return None
 
+    @handle_exceptions("网络请求失败", {"success": False})
     def fetch_from_source(self, url, timeout=5):
         """从单个源获取数据"""
         logging.debug(f"网络工具GET请求 - URL: {url}")
-        try:
-            response = requests.get(
-                url, timeout=timeout, headers={"User-Agent": "Mozilla/5.0"}
-            )
-            response.raise_for_status()  # 自动检查HTTP状态码
-            return {
-                "text": response.text,
-                "success": True,
-                "status_code": response.status_code,
-            }
-        except Exception:
-            return {"success": False}
+        response = requests.get(
+            url, timeout=timeout, headers={"User-Agent": "Mozilla/5.0"}
+        )
+        response.raise_for_status()  # 自动检查HTTP状态码
+        return {
+            "text": response.text,
+            "success": True,
+            "status_code": response.status_code,
+        }
 
     def save_to_local(self, content, file_path):
         """保存内容到本地文件"""

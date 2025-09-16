@@ -19,11 +19,20 @@ from .core.bh3_utils import (
     is_game_window_exist,
     click_center_of_game_window,
 )
+from .constants import TEMPLATE_WEB_DIR
+from .utils.exception_utils import handle_exceptions
 
 # ========== 初始化配置管理器和版本更新工具 ==========
-from .utils.network_utils import network_manager
-from .utils.config_utils import config_manager
-from .utils.version_utils import version_manager  # 导入版本管理器
+from .dependency_container import (
+    get_version_manager,
+    get_config_manager,
+    get_network_manager,
+)
+
+# 获取全局管理器实例
+network_manager = get_network_manager()
+config_manager = get_config_manager()
+version_manager = get_version_manager()
 
 # ========== 全局变量 ==========
 ui = None
@@ -44,30 +53,26 @@ class UpdateDownloadThread(QThread):
 
     update_status = Signal(str)  # 发送状态更新信号
 
+    @handle_exceptions("更新下载失败", None)
     def run(self):
-        try:
-            # 检查是否已被请求停止
-            if self.isInterruptionRequested():
-                return
+        # 检查是否已被请求停止
+        if self.isInterruptionRequested():
+            return
 
-            self.update_status.emit("正在准备下载...")
-            from .utils.network_utils import network_manager
+        self.update_status.emit("正在准备下载...")
+        # 使用全局导入的network_manager
 
-            # 尝试按优先级下载
-            success = network_manager.try_download_by_priority()
+        # 尝试按优先级下载
+        success = network_manager.try_download_by_priority()
 
-            # 再次检查是否已被请求停止
-            if self.isInterruptionRequested():
-                return
+        # 再次检查是否已被请求停止
+        if self.isInterruptionRequested():
+            return
 
-            if success:
-                self.update_status.emit("已在浏览器中打开下载链接")
-            else:
-                self.update_status.emit("所有下载源均不可用")
-
-        except Exception as e:
-            logging.error(f"更新下载失败: {e}")
-            self.update_status.emit("下载失败")
+        if success:
+            self.update_status.emit("已在浏览器中打开下载链接")
+        else:
+            self.update_status.emit("所有下载源均不可用")
 
 
 # ========== 更新检查线程 ==========
@@ -77,28 +82,20 @@ class UpdateCheckThread(QThread):
     update_result = Signal(bool, str)  # has_update, version_info
     update_status = Signal(str)  # 发送状态更新信号
 
+    @handle_exceptions("更新检查失败", None)
     def run(self):
-        try:
-            # 发送状态：开始检查更新
-            self.update_status.emit("正在获取远程版本信息...")
+        # 发送状态：开始检查更新
+        self.update_status.emit("正在获取远程版本信息...")
 
-            # 使用新的网络管理器检查更新
-            from .utils.config_utils import config_manager
+        # 使用全局导入的config_manager检查更新
+        update_info = config_manager.check_program_update()
 
-            update_info = config_manager.check_program_update()
-
-            if update_info.get("has_update"):
-                self.update_status.emit("发现新版本")
-                self.update_result.emit(True, update_info["remote_version"])
-            else:
-                self.update_status.emit("当前已是最新版本")
-                self.update_result.emit(
-                    False, update_info.get("current_version", "未知")
-                )
-
-        except Exception as e:
-            logging.error(f"更新检查失败: {e}")
-            self.update_result.emit(False, "检查失败")
+        if update_info.get("has_update"):
+            self.update_status.emit("发现新版本")
+            self.update_result.emit(True, update_info["remote_version"])
+        else:
+            self.update_status.emit("当前已是最新版本")
+            self.update_result.emit(False, update_info.get("current_version", "未知"))
 
 
 # ========== 登陆线程 ==========
@@ -106,103 +103,100 @@ class LoginThread(QThread):
     update_log = Signal(str)
     login_complete = Signal(bool)  # 登录完成信号，传递成功/失败状态
 
+    @handle_exceptions("登陆过程中发生错误", None)
     async def login(self):
         logging.info("正在登录B站账号...")
-        try:
-            config = config_manager.config
-            if config["last_login_succ"]:
-                logging.info(f"验证缓存账号 {config['uname']} 中...")
-                bs_user_info = await bsgamesdk.getUserInfo(
-                    config["uid"], config["access_key"]
-                )
-                if bs_user_info and "uname" in bs_user_info:
-                    logging.info(f"登陆B站账号 {bs_user_info['uname']} 成功！")
-                    bs_info = {"uid": config["uid"], "access_key": config["access_key"]}
-                else:
-                    logging.warning("缓存账号验证失败，将重新登录")
-                    config.update(
-                        {
-                            "last_login_succ": False,
-                            "uid": "",
-                            "access_key": "",
-                            "uname": "",
-                        }
-                    )
-                    config_manager.write_conf(config)
-            else:
-                logging.info(f"登陆B站账号 {config['account']} 中...")
-                bs_info = await bsgamesdk.login(
-                    config["account"], config["password"], config_manager.cap
-                )
-                if not bs_info or "access_key" not in bs_info:
-                    self.handle_login_failure(bs_info or {})
-                    # 发出信号，即使失败也要通知主线程登录流程结束
-                    self.login_complete.emit(False)
-                    return
-                bs_user_info = await bsgamesdk.getUserInfo(
-                    bs_info["uid"], bs_info["access_key"]
-                )
-                if not bs_user_info or "uname" not in bs_user_info:
-                    logging.error("获取用户信息失败")
-                    self.login_complete.emit(False)
-                    return
+        config = config_manager.config
+        if config["last_login_succ"]:
+            logging.info(f"验证缓存账号 {config['uname']} 中...")
+            bs_user_info = await bsgamesdk.getUserInfo(
+                config["uid"], config["access_key"]
+            )
+            if bs_user_info and "uname" in bs_user_info:
                 logging.info(f"登陆B站账号 {bs_user_info['uname']} 成功！")
+                bs_info = {"uid": config["uid"], "access_key": config["access_key"]}
+            else:
+                logging.warning("缓存账号验证失败，将重新登录")
                 config.update(
                     {
-                        "uid": bs_info["uid"],
-                        "access_key": bs_info["access_key"],
-                        "last_login_succ": True,
-                        "uname": bs_user_info["uname"],
+                        "last_login_succ": False,
+                        "uid": "",
+                        "access_key": "",
+                        "uname": "",
                     }
                 )
                 config_manager.write_conf(config)
-            logging.info("登陆崩坏3账号中...")
-            bh_info = await mihoyosdk.verify(bs_info["uid"], bs_info["access_key"])
-            config_manager.bh_info = bh_info
-            if bh_info["retcode"] != 0:
-                logging.info(f"登陆失败！{bh_info}")
+        else:
+            logging.info(f"登陆B站账号 {config['account']} 中...")
+            bs_info = await bsgamesdk.login(
+                config["account"], config["password"], config_manager.cap
+            )
+            if not bs_info or "access_key" not in bs_info:
+                self.handle_login_failure(bs_info or {})
+                # 发出信号，即使失败也要通知主线程登录流程结束
                 self.login_complete.emit(False)
                 return
-            logging.info("登录成功，账号：LoveElysia1314")
-            logging.info("登陆成功！获取OA服务器信息中...")
-            # 获取服务器版本号
-            server_bh_ver = await mihoyosdk.getBHVer(BH_VER)
-            # 检查版本是否匹配
-            if server_bh_ver != BH_VER:
-                logging.info(f"版本不匹配 (本地: {BH_VER}, 服务器: {server_bh_ver})！")
-
-            # 检查是否有对应版本的支持
-            if not version_manager.has_version_support(server_bh_ver):
-                logging.warning(f"警告：当前配置不支持游戏版本 {server_bh_ver}！")
-                logging.warning("请更新 version.json 中的 oa_versions 配置以支持新版本")
-                # 可以选择使用默认版本或提示用户
-                if version_manager.oa_versions:
-                    # 使用最新的支持版本
-                    supported_ver = max(version_manager.oa_versions.keys())
-                    logging.info(f"将使用支持的版本 {supported_ver} 继续")
-                    server_bh_ver = supported_ver
-                else:
-                    logging.error("无任何支持的版本配置！")
-                    self.login_complete.emit(False)
-                    return
-
-            logging.info(f"当前崩坏3版本: {server_bh_ver}")
-
-            # 根据服务器版本获取对应的OA_TOKEN
-            OA_TOKEN = version_manager.get_oa_token_for_version(server_bh_ver)
-
-            oa = await mihoyosdk.getOAServer(OA_TOKEN)
-            if len(oa) < 100:
-                logging.info("获取OA服务器失败！请检查Token后重试")
+            bs_user_info = await bsgamesdk.getUserInfo(
+                bs_info["uid"], bs_info["access_key"]
+            )
+            if not bs_user_info or "uname" not in bs_user_info:
+                logging.error("获取用户信息失败")
                 self.login_complete.emit(False)
                 return
-            logging.info("获取OA服务器成功！")
-            config["account_login"] = True
+            logging.info(f"登陆B站账号 {bs_user_info['uname']} 成功！")
+            config.update(
+                {
+                    "uid": bs_info["uid"],
+                    "access_key": bs_info["access_key"],
+                    "last_login_succ": True,
+                    "uname": bs_user_info["uname"],
+                }
+            )
             config_manager.write_conf(config)
-            self.login_complete.emit(True)
-        except Exception as e:
-            logging.error(f"登陆过程中发生错误: {str(e)}")
-            self.login_complete.emit(False)  # 异常时也发出信号
+        logging.info("登陆崩坏3账号中...")
+        bh_info = await mihoyosdk.verify(bs_info["uid"], bs_info["access_key"])
+        config_manager.bh_info = bh_info
+        if bh_info["retcode"] != 0:
+            logging.info(f"登陆失败！{bh_info}")
+            self.login_complete.emit(False)
+            return
+        logging.info("登录成功，账号：LoveElysia1314")
+        logging.info("登陆成功！获取OA服务器信息中...")
+        # 获取服务器版本号
+        server_bh_ver = await mihoyosdk.getBHVer(BH_VER)
+        # 检查版本是否匹配
+        if server_bh_ver != BH_VER:
+            logging.info(f"版本不匹配 (本地: {BH_VER}, 服务器: {server_bh_ver})！")
+
+        # 检查是否有对应版本的支持
+        if not version_manager.has_version_support(server_bh_ver):
+            logging.warning(f"警告：当前配置不支持游戏版本 {server_bh_ver}！")
+            logging.warning("请更新 version.json 中的 oa_versions 配置以支持新版本")
+            # 可以选择使用默认版本或提示用户
+            if version_manager.oa_versions:
+                # 使用最新的支持版本
+                supported_ver = max(version_manager.oa_versions.keys())
+                logging.info(f"将使用支持的版本 {supported_ver} 继续")
+                server_bh_ver = supported_ver
+            else:
+                logging.error("无任何支持的版本配置！")
+                self.login_complete.emit(False)
+                return
+
+        logging.info(f"当前崩坏3版本: {server_bh_ver}")
+
+        # 根据服务器版本获取对应的OA_TOKEN
+        OA_TOKEN = version_manager.get_oa_token_for_version(server_bh_ver)
+
+        oa = await mihoyosdk.getOAServer(OA_TOKEN)
+        if len(oa) < 100:
+            logging.info("获取OA服务器失败！请检查Token后重试")
+            self.login_complete.emit(False)
+            return
+        logging.info("获取OA服务器成功！")
+        config["account_login"] = True
+        config_manager.write_conf(config)
+        self.login_complete.emit(True)
 
     def handle_login_failure(self, bs_info):
         if "message" in bs_info:
@@ -229,12 +223,10 @@ class ParseThread(QThread):
     exit_app = Signal()
     should_stop = False  # 新增：控制线程停止的标志
 
+    @handle_exceptions("检查管理员权限失败", False)
     def is_admin(self):
         """使用Windows API检查管理员权限"""
-        try:
-            return ctypes.windll.shell32.IsUserAnAdmin()
-        except:
-            return False
+        return ctypes.windll.shell32.IsUserAnAdmin()
 
     async def periodic_check(self):
         """定期执行检查任务"""
@@ -349,22 +341,19 @@ class GuiHandler(logging.Handler):
         self._log_buffer = deque(maxlen=3)
         self.filter_enabled = True  # 可加配置开关
 
+    @handle_exceptions("日志输出失败", None)
     def emit(self, record):
-        try:
-            msg = self.format(record)
-            # 忽略空行
-            if not msg.strip():
-                return
-            # 仅过滤 INFO/DEBUG，ERROR/WARNING 不过滤
-            if self.filter_enabled and record.levelno in (logging.INFO, logging.DEBUG):
-                # 检查最近3条是否有重复（只要出现过就拦截）
-                if msg in self._log_buffer:
-                    return  # 拦截输出
-                self._log_buffer.append(msg)
-            self._emitter.sig.emit(msg)
-        except Exception:
-            # 确保日志系统自身不抛异常
-            pass
+        msg = self.format(record)
+        # 忽略空行
+        if not msg.strip():
+            return
+        # 仅过滤 INFO/DEBUG，ERROR/WARNING 不过滤
+        if self.filter_enabled and record.levelno in (logging.INFO, logging.DEBUG):
+            # 检查最近3条是否有重复（只要出现过就拦截）
+            if msg in self._log_buffer:
+                return  # 拦截输出
+            self._log_buffer.append(msg)
+        self._emitter.sig.emit(msg)
 
 
 # ========== 主窗口类 ==========
@@ -430,6 +419,7 @@ class SelfMainWindow(QMainWindow):
             config_manager.write_conf(config)
             ui.configGamePathBtn.setText("路径已配置")
 
+    @handle_exceptions("启动游戏失败", None)
     def launchGame(self):
         config = config_manager.config
         game_path = config.get("game_path")
@@ -438,25 +428,23 @@ class SelfMainWindow(QMainWindow):
             QMessageBox.warning(self, "路径未配置", "请先配置游戏路径！")
             return
 
-        try:
-            # 启动游戏进程
-            proc = subprocess.Popen([game_path])
-            logging.info("正在启动崩坏3...")
-            # 提升进程优先级（仅限Windows）
-            try:
-                import psutil
-                import time
+        # 启动游戏进程
+        proc = subprocess.Popen([game_path])
+        logging.info("正在启动崩坏3...")
+        # 提升进程优先级（仅限Windows）
+        self._boost_process_priority(proc)
 
-                # 等待进程启动，获取进程对象
-                time.sleep(0.5)  # 稍微等待进程稳定
-                p = psutil.Process(proc.pid)
-                # 设置为高优先级（psutil.HIGH_PRIORITY_CLASS）
-                p.nice(psutil.HIGH_PRIORITY_CLASS)
-                logging.info("已将游戏进程优先级提升为高")
-            except Exception as e:
-                logging.warning(f"提升进程优先级失败: {e}")
-        except Exception as e:
-            logging.error(f"启动失败: {str(e)}")
+    @handle_exceptions("提升进程优先级失败", None)
+    def _boost_process_priority(self, proc):
+        import psutil
+        import time
+
+        # 等待进程启动，获取进程对象
+        time.sleep(0.5)  # 稍微等待进程稳定
+        p = psutil.Process(proc.pid)
+        # 设置为高优先级（psutil.HIGH_PRIORITY_CLASS）
+        p.nice(psutil.HIGH_PRIORITY_CLASS)
+        logging.info("已将游戏进程优先级提升为高")
 
     def oneClickLogin(self, skip_launch=False):
         """
@@ -616,10 +604,7 @@ def main():
     window.show()
 
     # Flask 应用设置（回退到v1.3.2：启动时直接启动Flask线程）
-    template_dir = os.path.join(
-        os.path.dirname(__file__), "..", "..", "resources", "templates"
-    )
-    fapp = Flask(__name__, template_folder=template_dir)
+    fapp = Flask(__name__, template_folder=TEMPLATE_WEB_DIR)
     log = logging.getLogger("werkzeug")
     log.setLevel(logging.ERROR)
     cli = sys.modules["flask.cli"]
@@ -666,11 +651,11 @@ def main():
 
     # 应用配置到UI控件 (移到 setupUi 之后)
     for checkbox, feature, prefix in [
-        (ui.clipCheck, "clip_check", "当前状态"),
-        (ui.autoClose, "auto_close", "当前状态"),
-        (ui.autoClip, "auto_clip", "当前状态"),
-        (ui.autoClick, "auto_click", "当前状态"),
-        (ui.debugPrint, "debug_print", "当前状态"),
+        (ui.clipCheck, "clip_check", "当前"),
+        (ui.autoClose, "auto_close", "当前"),
+        (ui.autoClip, "auto_clip", "当前"),
+        (ui.autoClick, "auto_click", "当前"),
+        (ui.debugPrint, "debug_print", "当前"),
     ]:
         # 使用 config.get 并提供默认值 False，确保不会因键缺失出错
         checkbox.setChecked(config.get(feature, False))

@@ -8,7 +8,9 @@ import time
 import logging
 
 # 本地模块 imports
-from ...utils.version_utils import version_manager
+from ...dependency_container import get_version_manager
+
+version_manager = get_version_manager()
 
 url = "https://api-sdk.mihoyo.com/bh3_cn/combo/granter/login/v2/login"
 verifyBody = (

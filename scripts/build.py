@@ -15,7 +15,9 @@ sys.path.insert(
         (Path(__file__).parent.parent / "src" / "bbh3_scan_launch" / "utils").resolve()
     ),
 )
-from bbh3_scan_launch.utils.version_utils import version_manager
+from bbh3_scan_launch.dependency_container import get_version_manager
+
+version_manager = get_version_manager()
 
 version = version_manager.get_version_info("current")
 

@@ -17,13 +17,11 @@ from PySide6.QtWidgets import (
     QCheckBox,
 )
 
-# 优先使用全局实例，若失败则本地实例化，避免导入错误
-try:
-    from ..utils.version_utils import version_manager
-except ImportError:
-    from ..utils.version_utils import VersionManager
+# 使用依赖注入容器获取管理器实例
+from ..dependency_container import get_version_manager, get_config_manager
 
-    version_manager = VersionManager()
+version_manager = get_version_manager()
+config_manager = get_config_manager()
 
 
 class LoginDialog(QDialog):
@@ -248,8 +246,6 @@ class Ui_MainWindow:
         )
         # 读取config.json中的download_priority
         try:
-            from ..utils.config_utils import config_manager
-
             priority = config_manager.get_config(
                 "download_priority", ["gitee", "github"]
             )
@@ -265,8 +261,6 @@ class Ui_MainWindow:
                 for i in range(self.sourceListWidget.count())
             ]
             try:
-                from ..utils.config_utils import config_manager
-
                 config_manager.set_config("download_priority", new_priority)
             except Exception:
                 pass

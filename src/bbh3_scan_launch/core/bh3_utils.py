@@ -13,54 +13,47 @@ import win32con
 import win32gui
 import win32ui
 from .sdk import mihoyosdk
+from ..constants import GAME_WINDOW_TITLE, TEMPLATE_PICTURES_DIR
+from ..utils.exception_utils import handle_exceptions
 
-# 常量定义
-TEMPLATE_DIR = os.path.join(
-    os.path.dirname(__file__), "..", "..", "..", "resources", "pictures_to_match"
-)  # 模板图片目录
-GAME_WINDOW_TITLE = "崩坏3"  # 游戏窗口标题
+# 常量定义（已移至constants.py）
+TEMPLATE_DIR = TEMPLATE_PICTURES_DIR  # 向后兼容
 
 
+@handle_exceptions("检查窗口存在状态出错", False)
 def is_game_window_exist():
     """检查崩坏3游戏窗口是否存在"""
-    try:
 
-        def enum_windows(hwnd, results):
-            if (
-                win32gui.IsWindowVisible(hwnd)
-                and win32gui.GetWindowText(hwnd) == GAME_WINDOW_TITLE
-            ):
-                results.append(True)
+    def enum_windows(hwnd, results):
+        if (
+            win32gui.IsWindowVisible(hwnd)
+            and win32gui.GetWindowText(hwnd) == GAME_WINDOW_TITLE
+        ):
+            results.append(True)
 
-        results = []
-        win32gui.EnumWindows(enum_windows, results)
-        exist = bool(results)
-        logging.debug(f"游戏窗口存在检查: {'存在' if exist else '不存在'}")
-        return exist
-    except Exception as e:
-        logging.error(f"检查窗口存在状态出错: {e}")
-        return False
+    results = []
+    win32gui.EnumWindows(enum_windows, results)
+    exist = bool(results)
+    logging.debug(f"游戏窗口存在检查: {'存在' if exist else '不存在'}")
+    return exist
 
 
+@handle_exceptions("激活窗口出错", False)
 def active_game_window():
     """激活崩坏3游戏窗口并置于前台"""
-    try:
-        hwnd = win32gui.FindWindow(None, GAME_WINDOW_TITLE)
-        if not hwnd:
-            logging.debug("未找到游戏窗口")
-            return False
-
-        if win32gui.IsIconic(hwnd):
-            logging.debug("恢复最小化窗口")
-            win32gui.ShowWindow(hwnd, win32con.SW_RESTORE)
-            time.sleep(0.5)
-
-        logging.debug("激活游戏窗口")
-        win32gui.SetForegroundWindow(hwnd)
-        return True
-    except Exception as e:
-        logging.error(f"激活窗口出错: {e}")
+    hwnd = win32gui.FindWindow(None, GAME_WINDOW_TITLE)
+    if not hwnd:
+        logging.debug("未找到游戏窗口")
         return False
+
+    if win32gui.IsIconic(hwnd):
+        logging.debug("恢复最小化窗口")
+        win32gui.ShowWindow(hwnd, win32con.SW_RESTORE)
+        time.sleep(0.5)
+
+    logging.debug("激活游戏窗口")
+    win32gui.SetForegroundWindow(hwnd)
+    return True
 
 
 def click_center_of_game_window():
@@ -100,47 +93,43 @@ class WindowCapture:
         logging.debug(f"未找到窗口: {self.window_title}")
         return False
 
+    @handle_exceptions("窗口捕获出错", None)
     def capture_window(self):
         """截取整个游戏窗口画面（支持后台窗口）"""
-        try:
-            if not self.hwnd and not self._find_window():
-                logging.debug("无法获取窗口句柄，截图失败")
-                return None
-
-            left, top, right, bot = win32gui.GetWindowRect(self.hwnd)
-            width, height = right - left, bot - top
-            logging.debug(f"窗口尺寸: {width}x{height}")
-
-            hwndDC = win32gui.GetWindowDC(self.hwnd)
-            mfcDC = win32ui.CreateDCFromHandle(hwndDC)
-            saveDC = mfcDC.CreateCompatibleDC()
-            saveBitMap = win32ui.CreateBitmap()
-            saveBitMap.CreateCompatibleBitmap(mfcDC, width, height)
-            saveDC.SelectObject(saveBitMap)
-
-            windll.user32.PrintWindow(self.hwnd, saveDC.GetSafeHdc(), 0)
-
-            bmpinfo = saveBitMap.GetInfo()
-            bmpstr = saveBitMap.GetBitmapBits(True)
-            pil_img = Image.frombuffer(
-                "RGB",
-                (bmpinfo["bmWidth"], bmpinfo["bmHeight"]),
-                bmpstr,
-                "raw",
-                "BGRX",
-                0,
-                1,
-            )
-
-            win32gui.DeleteObject(saveBitMap.GetHandle())
-            saveDC.DeleteDC()
-            mfcDC.DeleteDC()
-            win32gui.ReleaseDC(self.hwnd, hwndDC)
-            return pil_img
-        except Exception as e:
-            logging.error(f"窗口捕获出错: {e}")
-            self.hwnd = None
+        if not self.hwnd and not self._find_window():
+            logging.debug("无法获取窗口句柄，截图失败")
             return None
+
+        left, top, right, bot = win32gui.GetWindowRect(self.hwnd)
+        width, height = right - left, bot - top
+        logging.debug(f"窗口尺寸: {width}x{height}")
+
+        hwndDC = win32gui.GetWindowDC(self.hwnd)
+        mfcDC = win32ui.CreateDCFromHandle(hwndDC)
+        saveDC = mfcDC.CreateCompatibleDC()
+        saveBitMap = win32ui.CreateBitmap()
+        saveBitMap.CreateCompatibleBitmap(mfcDC, width, height)
+        saveDC.SelectObject(saveBitMap)
+
+        windll.user32.PrintWindow(self.hwnd, saveDC.GetSafeHdc(), 0)
+
+        bmpinfo = saveBitMap.GetInfo()
+        bmpstr = saveBitMap.GetBitmapBits(True)
+        pil_img = Image.frombuffer(
+            "RGB",
+            (bmpinfo["bmWidth"], bmpinfo["bmHeight"]),
+            bmpstr,
+            "raw",
+            "BGRX",
+            0,
+            1,
+        )
+
+        win32gui.DeleteObject(saveBitMap.GetHandle())
+        saveDC.DeleteDC()
+        mfcDC.DeleteDC()
+        win32gui.ReleaseDC(self.hwnd, hwndDC)
+        return pil_img
 
 
 class ImageProcessor:
@@ -293,71 +282,65 @@ class ImageProcessor:
         logging.debug("未找到符合条件的匹配")
         return False
 
+    @handle_exceptions("二维码解析出错", False)
     async def parse_qr_code(self, image_source="clipboard", config=None, bh_info=None):
         """从剪贴板或游戏窗口解析二维码并完成崩坏3登录"""
-        try:
-            if image_source == "clipboard":
-                logging.debug("从剪贴板获取图像")
-                im = ImageGrab.grabclipboard()
-                if not isinstance(im, Image.Image):
-                    return False
-            elif image_source == "game_window":
-                logging.debug("从游戏窗口获取图像")
-                capturer = self._init_window_capturer()
-                im = capturer.capture_window()
-                if im is None:
-                    logging.warning("游戏窗口截图失败")
-                    return False
-                im = im.convert("RGB")
-            else:
-                logging.warning("无效的图像来源")
+        if image_source == "clipboard":
+            logging.debug("从剪贴板获取图像")
+            im = ImageGrab.grabclipboard()
+            if not isinstance(im, Image.Image):
                 return False
-
-            result = decode(im)
-            if not result:
-                logging.debug("未检测到二维码")
+        elif image_source == "game_window":
+            logging.debug("从游戏窗口获取图像")
+            capturer = self._init_window_capturer()
+            im = capturer.capture_window()
+            if im is None:
+                logging.warning("游戏窗口截图失败")
                 return False
-
-            url = result[0].data.decode("utf-8")
-            logging.debug(f"解码URL: {url}")
-
-            if "ticket=" not in url:
-                logging.debug("无效的二维码格式")
-                return False
-
-            ticket = next(
-                (
-                    p.split("=")[1]
-                    for p in url.split("?")[1].split("&")
-                    if p.startswith("ticket=")
-                ),
-                None,
-            )
-
-            if ticket and config and bh_info:
-                logging.info("检测到有效登陆票据，开始扫码验证")
-                await mihoyosdk.scanCheck(bh_info, ticket, config)
-                self.clear_clipboard()
-                logging.info("扫码验证完成")
-                return True
-
-            logging.info("缺少必要的登陆信息")
+            im = im.convert("RGB")
+        else:
+            logging.warning("无效的图像来源")
             return False
 
-        except Exception as e:
-            logging.error(f"二维码解析出错: {e}")
+        result = decode(im)
+        if not result:
+            logging.debug("未检测到二维码")
             return False
 
+        url = result[0].data.decode("utf-8")
+        logging.debug(f"解码URL: {url}")
+
+        if "ticket=" not in url:
+            logging.debug("无效的二维码格式")
+            return False
+
+        ticket = next(
+            (
+                p.split("=")[1]
+                for p in url.split("?")[1].split("&")
+                if p.startswith("ticket=")
+            ),
+            None,
+        )
+
+        if ticket and config and bh_info:
+            logging.info("检测到有效登陆票据，开始扫码验证")
+            await mihoyosdk.scanCheck(bh_info, ticket, config)
+            self.clear_clipboard()
+            logging.info("扫码验证完成")
+            return True
+
+        logging.info("缺少必要的登陆信息")
+        return False
+
+    @handle_exceptions("清空剪贴板出错")
     def clear_clipboard(self):
         """清空系统剪贴板内容"""
-        try:
-            logging.debug("清空剪贴板")
-            if windll.user32.OpenClipboard(None):
-                windll.user32.EmptyClipboard()
-                windll.user32.CloseClipboard()
-                logging.debug("剪贴板已清空")
-        except Exception as e:
-            logging.error(f"清空剪贴板出错: {e}")
+        logging.debug("清空剪贴板")
+        if windll.user32.OpenClipboard(None):
+            windll.user32.EmptyClipboard()
+            windll.user32.CloseClipboard()
+            logging.debug("剪贴板已清空")
 
 
 # 初始化全局实例
