@@ -98,8 +98,6 @@ def main():
     if sys.platform == "win32":
         create_windows_shortcuts(app_dir, exe_name)
 
-    # 创建压缩包
-    create_clean_package(output_dir)
     # 创建安装文件
     build_installer.main()
 

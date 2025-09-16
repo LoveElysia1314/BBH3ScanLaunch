@@ -38,7 +38,6 @@ async def sendBiliPost(url, data):
     logging.debug(f"B站POST请求 - 数据: {data}")
     try:
         session = requests.Session()
-        session.trust_env = False
         res = session.post(url=url, data=data, headers=header)
         if res is None:
             logging.info("请求错误，3s后重试...")

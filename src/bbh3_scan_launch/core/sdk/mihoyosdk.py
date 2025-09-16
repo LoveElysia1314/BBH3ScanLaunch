@@ -186,7 +186,6 @@ async def sendPost(target, data, noReturn=False):
     logging.debug(f"米哈游POST请求 - 数据: {data}")
     try:
         session = requests.Session()
-        session.trust_env = False
         res = session.post(url=target, data=data)
         if noReturn:
             return
@@ -203,7 +202,6 @@ async def sendGet(target, default_ret=None):
     logging.debug(f"米哈游GET请求 - URL: {target}")
     try:
         session = requests.Session()
-        session.trust_env = False
         res = session.get(url=target)
         if res is None:
             logging.info("请求错误，正在重试...")
@@ -218,7 +216,6 @@ async def sendGetRaw(target, default_ret=None):
     logging.debug(f"米哈游GET原始请求 - URL: {target}")
     try:
         session = requests.Session()
-        session.trust_env = False
         res = session.get(url=target)
         if res is None:
             logging.info("请求错误，正在重试...")

@@ -3,6 +3,7 @@ import sys
 import subprocess
 import shutil
 import json
+import zipfile
 from datetime import datetime
 from pathlib import Path
 
@@ -297,6 +298,14 @@ def build_installer():
         print(f"安装包文件名: {setup_filename}")
 
         if setup_filename:
+            # 创建压缩包
+            zip_file = project_root / f"BBH3ScanLaunch_Setup_v{current_version}.zip"
+            zip_file.unlink(missing_ok=True)
+            setup_path = project_root / setup_filename
+            with zipfile.ZipFile(zip_file, "w", zipfile.ZIP_DEFLATED) as zf:
+                zf.write(setup_path, setup_filename)
+            print(f"压缩包已创建: {zip_file}")
+
             version_info = generate_version_info(
                 project_root, setup_filename, current_version
             )
@@ -305,6 +314,27 @@ def build_installer():
                 print(f"安装包大小: {version_info['app_info']['size']}")
             else:
                 print("版本信息生成完成")
+
+                # 自动更新 version.json 的 download_url 字段（兼容所有 BBH3ScanLaunch_Setup*.zip 文件名）
+                import re
+                version_file = project_root / "updates" / "version.json"
+                if version_file.exists():
+                    with open(version_file, "r", encoding="utf-8") as f:
+                        data = json.load(f)
+                    zip_name = f"BBH3ScanLaunch_Setup_v{current_version}.zip"
+                    pattern = re.compile(r"BBH3ScanLaunch_Setup[^/]*?\\.zip")
+                    for source in ["gitee", "github"]:
+                        if (
+                            "sources" in data
+                            and "download_url" in data["sources"]
+                            and source in data["sources"]["download_url"]
+                        ):
+                            old_url = data["sources"]["download_url"][source]
+                            new_url = pattern.sub(zip_name, old_url)
+                            data["sources"]["download_url"][source] = new_url
+                    with open(version_file, "w", encoding="utf-8") as f:
+                        json.dump(data, f, indent=4, ensure_ascii=False)
+                    print(f"version.json download_url 已自动更新为: {zip_name}")
 
         return True
 

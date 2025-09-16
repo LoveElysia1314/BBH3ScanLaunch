@@ -5,8 +5,7 @@ import webbrowser
 import json
 import logging
 import time
-from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import List, Dict, Optional
+from typing import List, Dict
 
 
 class SourceManager:
@@ -14,7 +13,7 @@ class SourceManager:
 
     def __init__(self):
         self.version_info = None
-        
+
     def load_version_info(self, version_info):
         """加载版本信息，用于获取sources配置"""
         self.version_info = version_info
@@ -23,7 +22,7 @@ class SourceManager:
         """根据类别获取所有源的链接"""
         if not self.version_info:
             return {}
-        
+
         sources = self.version_info.get("sources", {})
         return sources.get(category, {})
 
@@ -31,7 +30,10 @@ class SourceManager:
         """获取源优先级顺序（从config.json读取）"""
         try:
             from .config_utils import config_manager
-            priority = config_manager.get_config("download_priority", ["gitee", "github"])
+
+            priority = config_manager.get_config(
+                "download_priority", ["gitee", "github"]
+            )
             return priority if isinstance(priority, list) else ["gitee", "github"]
         except Exception:
             return ["gitee", "github"]
@@ -87,22 +89,26 @@ class NetworkManager:
             # 这是一个特殊方法，只用于获取version.json本身
             # 因为没有version.json就无法获取源配置，所以这里使用硬编码的获取逻辑
             source_priority = self.source_manager.normalize_source_input(source)
-            
+
             # 硬编码的version.json获取地址（唯一保留的拼接逻辑）
             version_urls = []
             for source_name in source_priority:
                 if source_name == "gitee":
-                    version_urls.append({
-                        "name": "gitee",
-                        "url": "https://gitee.com/LoveElysia1314/BBH3ScanLaunch/raw/main/updates/version.json",
-                        "type": "hardcoded"
-                    })
+                    version_urls.append(
+                        {
+                            "name": "gitee",
+                            "url": "https://gitee.com/LoveElysia1314/BBH3ScanLaunch/raw/main/updates/version.json",
+                            "type": "hardcoded",
+                        }
+                    )
                 elif source_name == "github":
-                    version_urls.append({
-                        "name": "github", 
-                        "url": "https://raw.githubusercontent.com/LoveElysia1314/BBH3ScanLaunch/main/updates/version.json",
-                        "type": "hardcoded"
-                    })
+                    version_urls.append(
+                        {
+                            "name": "github",
+                            "url": "https://raw.githubusercontent.com/LoveElysia1314/BBH3ScanLaunch/main/updates/version.json",
+                            "type": "hardcoded",
+                        }
+                    )
 
             # 获取version.json
             for source_info in version_urls:
@@ -136,21 +142,23 @@ class NetworkManager:
 
         source_priority = self.source_manager.normalize_source_input(source_priority)
         download_links = self.source_manager.get_links_by_category("download_url")
-        
+
         urls = []
         for source_name in source_priority:
             if source_name in download_links:
-                urls.append({
-                    "name": source_name,
-                    "url": download_links[source_name],
-                    "type": "download"
-                })
+                urls.append(
+                    {
+                        "name": source_name,
+                        "url": download_links[source_name],
+                        "type": "download",
+                    }
+                )
         return urls
 
     def try_download_by_priority(self, source_priority=None):
         """按优先级尝试下载，失败自动切换下一个源"""
         candidates = self.get_download_links(source_priority)
-        
+
         if not candidates:
             logging.error("没有可用的下载链接")
             return False
@@ -158,7 +166,7 @@ class NetworkManager:
         for candidate in candidates:
             try:
                 logging.info(f"尝试从 {candidate['name']} 下载: {candidate['url']}")
-                webbrowser.open(candidate['url'])
+                webbrowser.open(candidate["url"])
                 return True
             except Exception as e:
                 logging.warning(f"从 {candidate['name']} 下载失败: {e}")

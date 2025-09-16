@@ -19,7 +19,6 @@ from .core.bh3_utils import (
     is_game_window_exist,
     click_center_of_game_window,
 )
-from .utils.utils import DummyWriter
 
 # ========== 初始化配置管理器和版本更新工具 ==========
 from .utils.network_utils import network_manager
@@ -88,15 +87,15 @@ class UpdateDownloadThread(QThread):
         try:
             self.update_status.emit("正在准备下载...")
             from .utils.network_utils import network_manager
-            
+
             # 尝试按优先级下载
             success = network_manager.try_download_by_priority()
-            
+
             if success:
                 self.update_status.emit("已在浏览器中打开下载链接")
             else:
                 self.update_status.emit("所有下载源均不可用")
-                
+
         except Exception as e:
             logging.error(f"更新下载失败: {e}")
             self.update_status.emit("下载失败")
@@ -116,6 +115,7 @@ class UpdateCheckThread(QThread):
 
             # 使用新的网络管理器检查更新
             from .utils.config_utils import config_manager
+
             update_info = config_manager.check_program_update()
 
             if update_info.get("has_update"):
@@ -123,7 +123,9 @@ class UpdateCheckThread(QThread):
                 self.update_result.emit(True, update_info["remote_version"])
             else:
                 self.update_status.emit("当前已是最新版本")
-                self.update_result.emit(False, update_info.get("current_version", "未知"))
+                self.update_result.emit(
+                    False, update_info.get("current_version", "未知")
+                )
 
         except Exception as e:
             logging.error(f"更新检查失败: {e}")
@@ -318,10 +320,6 @@ class ParseThread(QThread):
                 # 短暂等待后继续，避免频繁报错
                 await asyncio.sleep(1)
 
-    def stop(self):
-        """停止线程"""
-        self.should_stop = True
-
     def run(self):
         asyncio.run(self.periodic_check())
 
@@ -473,6 +471,7 @@ class SelfMainWindow(QMainWindow):
                 try:
                     import psutil
                     import time
+
                     # 等待进程启动，获取进程对象
                     time.sleep(0.5)  # 稍微等待进程稳定
                     p = psutil.Process(proc.pid)
@@ -544,27 +543,6 @@ class SelfMainWindow(QMainWindow):
         # 清理线程引用
         if self.update_download_thread:
             self.update_download_thread = None
-
-    def closeEvent(self, event):
-        """窗口关闭事件处理"""
-        logging.info("主窗口正在关闭，清理线程...")
-
-        # 停止更新检查线程
-        if hasattr(self, 'update_check_thread') and self.update_check_thread.isRunning():
-            logging.info("请求更新检查线程停止...")
-            self.update_check_thread.requestInterruption()
-            if not self.update_check_thread.wait(3000):  # 等待最多3秒
-                logging.warning("更新检查线程未能及时停止")
-
-        # 停止更新下载线程
-        if hasattr(self, 'update_download_thread') and self.update_download_thread and self.update_download_thread.isRunning():
-            logging.info("请求更新下载线程停止...")
-            self.update_download_thread.requestInterruption()
-            if not self.update_download_thread.wait(3000):  # 等待最多3秒
-                logging.warning("更新下载线程未能及时停止")
-
-        logging.info("线程清理完成")
-        event.accept()
 
     def on_update_check_finished(self, has_update, version_info):
         """处理更新检查结果的槽函数"""
@@ -682,26 +660,6 @@ def main():
         log = logging.getLogger("werkzeug")
         log.setLevel(logging.ERROR)
         cli = sys.modules["flask.cli"]
-        cli.show_server_banner = lambda *x: None
-
-        @fapp.route("/")
-        def index():
-            return render_template("index.html")
-
-        @fapp.route("/geetest")
-        def geetest():
-            return render_template("geetest.html")
-
-        @fapp.route("/ret", methods=["POST"])
-        def ret():
-            if not request.json:
-                logging.info("请求错误")
-                abort(400)
-            input_data = request.json
-            logging.debug(f"Input = {input_data}")
-            config_manager.cap = input_data
-            login_accept()
-            return "1"
 
         flaskThread = Thread(
             target=fapp.run,

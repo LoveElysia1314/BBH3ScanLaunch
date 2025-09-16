@@ -90,7 +90,6 @@ class WindowCapture:
         logging.debug(f"初始化窗口捕获器: {window_title}")
         self.window_title = window_title
         self.hwnd = None
-        self._retry_count = 0
 
     def _find_window(self):
         """查找崩坏3游戏窗口句柄"""
@@ -249,7 +248,7 @@ class ImageProcessor:
         )
 
         result = matchTemplate(screen_np, template_np, TM_CCOEFF_NORMED)
-        min_val, max_val, min_loc, max_loc = minMaxLoc(result)
+        _, max_val, _, max_loc = minMaxLoc(result)
         # print(f"[DEBUG] 模板匹配结果 - 最大置信度: {max_val:.2f}")
 
         if max_val >= threshold:

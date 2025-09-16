@@ -39,8 +39,6 @@ class ConfigManager:
 
     def __init__(self):
         self.lock = threading.Lock()
-        self.m_cast_group_ip = "239.0.1.255"
-        self.m_cast_group_port = 12585
         self.bh_info = {}
         self.data = {}
         self.cap = None
@@ -136,29 +134,33 @@ class ConfigManager:
         # 获取远程版本信息
         if not network_manager.fetch_remote_files(source=source):
             return {"has_update": False, "error": "无法获取远程版本信息"}
-        
+
         if not network_manager.version_info:
             return {"has_update": False, "error": "版本信息为空"}
-        
+
         # 比较版本
         current_version = version_manager.get_version_info("current")
-        remote_version = network_manager.version_info.get("app_info", {}).get("version", "0.0.0")
-        
+        remote_version = network_manager.version_info.get("app_info", {}).get(
+            "version", "0.0.0"
+        )
+
         # 简单版本比较
         def version_tuple(v):
-            return tuple(map(int, v.split('.')))
-        
+            return tuple(map(int, v.split(".")))
+
         has_update = version_tuple(remote_version) > version_tuple(current_version)
-        
+
         result = {
             "has_update": has_update,
             "current_version": current_version,
             "remote_version": remote_version,
         }
-        
+
         if has_update:
             # 获取下载链接
-            download_links = network_manager.source_manager.get_links_by_category("download_url")
+            download_links = network_manager.source_manager.get_links_by_category(
+                "download_url"
+            )
             if download_links:
                 # 返回第一个可用的下载链接
                 priority = network_manager.source_manager.get_priority_order()
@@ -166,30 +168,8 @@ class ConfigManager:
                     if source_name in download_links:
                         result["download_url"] = download_links[source_name]
                         break
-        
+
         return result
-
-    def download_program_update(self, progress_callback=None, source=None):
-        """
-        下载程序更新。
-        可以传递 source 参数来指定下载文件的来源。
-        """
-        update_info = self.check_program_update(source=source)
-        if update_info.get("has_update"):
-            # 使用新的下载方法
-            return network_manager.try_download_by_priority(
-                source_priority=network_manager.source_manager.normalize_source_input(source)
-            )
-        elif update_info.get("has_update"):
-            logging.warning("更新信息中缺少下载链接")
-        return None
-
-    # program_version 相关方法可以保留，但逻辑可能需要调整
-    # 如果版本信息完全由 network_utils 管理，这些可能变得不那么重要
-    def get_program_version(self):
-        """获取当前程序版本"""
-        # 优先使用 version_utils 中的版本
-        return self.current_version
 
 
 # 创建配置管理器实例

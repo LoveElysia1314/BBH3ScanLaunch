@@ -136,19 +136,6 @@ class VersionManager:
         except Exception as e:
             return f"[ERROR] 读取更新日志失败: {e}"
 
-    def refresh_remote_version(self) -> bool:
-        """刷新远程版本信息"""
-        try:
-            new_version = self._load_version_from_file()
-            if new_version != self.remote_version:
-                self.remote_version = new_version
-                self._version_info_cache["remote"] = new_version
-                return True
-            return False
-        except Exception as e:
-            logging.warning(f"刷新远程版本失败: {e}")
-            return False
-
     def refresh_oa_info(self) -> bool:
         """刷新OA版本信息"""
         try:

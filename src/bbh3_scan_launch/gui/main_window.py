@@ -238,15 +238,21 @@ class Ui_MainWindow:
 
         # 下载源优先级调整控件（标签在上，控件在下）
         from PySide6.QtWidgets import QListWidget
+
         label = QLabel("下载源优先级调整（拖拽排序）：")
         gridLayout.addWidget(label, 2, 0, 1, 1)
         self.sourceListWidget = QListWidget()
         self.sourceListWidget.setDragDropMode(QListWidget.DragDropMode.InternalMove)
-        self.sourceListWidget.setSelectionMode(QListWidget.SelectionMode.SingleSelection)
+        self.sourceListWidget.setSelectionMode(
+            QListWidget.SelectionMode.SingleSelection
+        )
         # 读取config.json中的download_priority
         try:
             from ..utils.config_utils import config_manager
-            priority = config_manager.get_config("download_priority", ["gitee", "github"])
+
+            priority = config_manager.get_config(
+                "download_priority", ["gitee", "github"]
+            )
         except Exception:
             priority = ["gitee", "github"]
         self.sourceListWidget.addItems(priority)
@@ -254,12 +260,17 @@ class Ui_MainWindow:
 
         # 绑定顺序变化事件，自动写入config.json
         def update_priority():
-            new_priority = [self.sourceListWidget.item(i).text() for i in range(self.sourceListWidget.count())]
+            new_priority = [
+                self.sourceListWidget.item(i).text()
+                for i in range(self.sourceListWidget.count())
+            ]
             try:
                 from ..utils.config_utils import config_manager
+
                 config_manager.set_config("download_priority", new_priority)
             except Exception:
                 pass
+
         self.sourceListWidget.model().rowsMoved.connect(update_priority)
 
         layout.addWidget(self.updateGroup)
@@ -287,29 +298,19 @@ class Ui_MainWindow:
         """连接所有按钮和复选框的信号与槽函数"""
         self.loginBiliBtn.clicked.connect(MainWindow.login)
         self.clipCheck.clicked.connect(
-            lambda checked: MainWindow.toggle_feature(
-                "clip_check", self.clipCheck, "当前"
-            )
+            lambda: MainWindow.toggle_feature("clip_check", self.clipCheck, "当前")
         )
         self.autoClip.clicked.connect(
-            lambda checked: MainWindow.toggle_feature(
-                "auto_clip", self.autoClip, "当前"
-            )
+            lambda: MainWindow.toggle_feature("auto_clip", self.autoClip, "当前")
         )
         self.autoClose.clicked.connect(
-            lambda checked: MainWindow.toggle_feature(
-                "auto_close", self.autoClose, "当前"
-            )
+            lambda: MainWindow.toggle_feature("auto_close", self.autoClose, "当前")
         )
         self.autoClick.clicked.connect(
-            lambda checked: MainWindow.toggle_feature(
-                "auto_click", self.autoClick, "当前"
-            )
+            lambda: MainWindow.toggle_feature("auto_click", self.autoClick, "当前")
         )
         self.debugPrint.clicked.connect(
-            lambda checked: MainWindow.toggle_feature(
-                "debug_print", self.debugPrint, "当前"
-            )
+            lambda: MainWindow.toggle_feature("debug_print", self.debugPrint, "当前")
         )
         self.configGamePathBtn.clicked.connect(MainWindow.configGamePath)
         self.launchGameBtn.clicked.connect(MainWindow.launchGame)
