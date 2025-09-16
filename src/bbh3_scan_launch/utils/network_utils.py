@@ -264,10 +264,6 @@ class NetworkManager:
         logging.error("所有下载源均不可用")
         return False
 
-    def open_best_download_in_browser(self, source_priority=None):
-        """直接使用第一个可用源打开下载链接"""
-        return self.try_download_by_priority(source_priority)
-
 
 # 全局实例
 network_manager = NetworkManager()

@@ -6,7 +6,7 @@
 import asyncio
 import logging
 import functools
-from typing import Callable, Any, Optional
+from typing import Callable, Any
 
 
 def handle_exceptions(
@@ -50,19 +50,3 @@ def handle_exceptions(
             return wrapper
 
     return decorator
-
-
-def handle_exceptions_with_logging(
-    error_msg: str = "操作执行出错", return_value: Any = None
-) -> Callable:
-    """
-    带详细日志的异常处理装饰器（向后兼容）
-
-    Args:
-        error_msg: 错误消息
-        return_value: 发生异常时返回的值
-
-    Returns:
-        装饰器函数
-    """
-    return handle_exceptions(error_msg, return_value, "error")

@@ -326,6 +326,7 @@ def build_installer():
                     data = json.load(f)
                 zip_name = f"BBH3ScanLaunch_Setup_v{current_version}.zip"
                 pattern = re.compile(r"BBH3ScanLaunch_Setup[^/]*?\.zip")
+                version_path_pattern = re.compile(r"/download/[^/]+/")
                 for source in ["gitee", "github"]:
                     if (
                         "sources" in data
@@ -333,11 +334,18 @@ def build_installer():
                         and source in data["sources"]["download_url"]
                     ):
                         old_url = data["sources"]["download_url"][source]
+                        # 替换文件名部分
                         new_url = pattern.sub(zip_name, old_url)
+                        # 将 /download/ 后面的版本路径替换为新版本
+                        new_url = version_path_pattern.sub(
+                            f"/download/v{current_version}/", new_url
+                        )
                         data["sources"]["download_url"][source] = new_url
                 with open(version_file, "w", encoding="utf-8") as f:
                     json.dump(data, f, indent=4, ensure_ascii=False)
-                print(f"version.json download_url 已自动更新为: {zip_name}")
+                print(
+                    f"version.json download_url 已自动更新为: {zip_name}，版本路径已更新为 v{current_version}"
+                )
 
         return True
 

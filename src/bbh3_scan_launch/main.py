@@ -1,12 +1,12 @@
 # main.py
 import ctypes
 import sys
-import os
 import asyncio
 import subprocess
 import webbrowser
+import atexit
 from threading import Thread
-from flask import Flask, abort, render_template, request
+from flask import Flask
 import logging
 from PySide6.QtCore import QThread, Signal, QTimer, QObject
 from PySide6.QtGui import QIcon
@@ -288,14 +288,18 @@ class ParseThread(QThread):
         """定期执行检查任务"""
         while not self.should_stop:
             try:
-                # 每次循环都获取最新的配置
-                config = config_manager.config
+                # 每次循环都获取“有效配置”（考虑临时覆盖）
+                config = config_manager.get_effective_config()
 
                 # 处理自动点击
-                if config["auto_click"] and self.is_admin() and is_game_window_exist():
+                if (
+                    config.get("auto_click")
+                    and self.is_admin()
+                    and is_game_window_exist()
+                ):
                     image_processor.match_and_click()
                 elif (
-                    config["auto_click"]
+                    config.get("auto_click")
                     and not self.is_admin()
                     and not hasattr(self, "admin_warning_printed")
                 ):
@@ -303,7 +307,7 @@ class ParseThread(QThread):
                     self.admin_warning_printed = True
 
                 # 处理自动截屏
-                if config["auto_clip"] and is_game_window_exist():
+                if config.get("auto_clip") and is_game_window_exist():
                     screenshot = image_processor.capture_screen()
                     if screenshot:
                         qr_parsed = await image_processor.parse_qr_code(
@@ -312,11 +316,11 @@ class ParseThread(QThread):
                             bh_info=config_manager.bh_info,
                         )
                         if qr_parsed:
-                            if config["auto_click"]:
+                            if config.get("auto_click"):
                                 logging.info("扫码成功，4秒后将自动点击窗口中心")
                                 await asyncio.sleep(4)
                                 click_center_of_game_window()
-                            if config["auto_close"]:
+                            if config.get("auto_close"):
                                 logging.info("已启用自动退出，2秒后将关闭扫码器")
                                 await asyncio.sleep(2)
                                 self.exit_app.emit()
@@ -492,22 +496,7 @@ class SelfMainWindow(QMainWindow):
             return
 
         # 启动游戏进程
-        proc = subprocess.Popen([game_path])
         logging.info("正在启动崩坏3...")
-        # 提升进程优先级（仅限Windows）
-        self._boost_process_priority(proc)
-
-    @handle_exceptions("提升进程优先级失败", None)
-    def _boost_process_priority(self, proc):
-        import psutil
-        import time
-
-        # 等待进程启动，获取进程对象
-        time.sleep(0.5)  # 稍微等待进程稳定
-        p = psutil.Process(proc.pid)
-        # 设置为高优先级（psutil.HIGH_PRIORITY_CLASS）
-        p.nice(psutil.HIGH_PRIORITY_CLASS)
-        logging.info("已将游戏进程优先级提升为高")
 
     def oneClickLogin(self, skip_launch=False):
         """
@@ -517,17 +506,28 @@ class SelfMainWindow(QMainWindow):
         if not skip_launch:
             self.launchGame()
         self.temp_mode = True
-        config = config_manager.config
-        for feature in [
-            "clip_check",
-            "auto_clip",
-            "auto_close",
-            "auto_click",
-            "debug_print",
-        ]:
-            self.prev_settings[feature] = config.get(feature, False)
-            config[feature] = True
-        config_manager.write_conf(config)
+        # 记录原始设置用于UI复原（不持久化）
+        base_config = config_manager.config
+        self.prev_settings = {
+            k: base_config.get(k, False)
+            for k in [
+                "clip_check",
+                "auto_clip",
+                "auto_close",
+                "auto_click",
+                "debug_print",
+            ]
+        }
+        # 启用临时覆盖（不写入文件）
+        config_manager.begin_temp_overrides(
+            {
+                "clip_check": True,
+                "auto_clip": True,
+                "auto_close": True,
+                "auto_click": True,
+                "debug_print": True,
+            }
+        )
         for checkbox, prefix in [
             (ui.clipCheck, "当前"),
             (ui.autoClip, "当前"),
@@ -541,17 +541,16 @@ class SelfMainWindow(QMainWindow):
     def restoreOriginalSettings(self):
         if not self.temp_mode:
             return
-        config = config_manager.config
-        for feature, value in self.prev_settings.items():
-            config[feature] = value
-        config_manager.write_conf(config)
+        # 清除临时覆盖，恢复真实配置视图
+        config_manager.clear_temp_overrides()
+        # 将 UI 勾选状态恢复为原始设置（不改变磁盘文件）
         for checkbox, feature, prefix in [
             (ui.clipCheck, "clip_check", "当前"),
             (ui.autoClip, "auto_clip", "当前"),
             (ui.autoClose, "auto_close", "当前"),
             (ui.autoClick, "auto_click", "当前"),
         ]:
-            checkbox.setChecked(config.get(feature, False))
+            checkbox.setChecked(self.prev_settings.get(feature, False))
             self.update_status_text(checkbox, prefix)
         logging.info("一键进入舰桥模式已结束，恢复原始设置")
 
@@ -670,27 +669,6 @@ def main():
     fapp = Flask(__name__, template_folder=TEMPLATE_WEB_DIR)
     log = logging.getLogger("werkzeug")
     log.setLevel(logging.ERROR)
-    cli = sys.modules["flask.cli"]
-    cli.show_server_banner = lambda *x: None
-
-    @fapp.route("/")
-    def index():
-        return render_template("index.html")
-
-    @fapp.route("/geetest")
-    def geetest():
-        return render_template("geetest.html")
-
-    @fapp.route("/ret", methods=["POST"])
-    def ret():
-        if not request.json:
-            logging.info("请求错误")
-            abort(400)
-        input_data = request.json
-        logging.debug(f"Input = {input_data}")
-        config_manager.cap = input_data
-        login_accept()
-        return "1"
 
     flaskThread = Thread(
         target=fapp.run,
@@ -745,6 +723,9 @@ def main():
     if "--auto-login" in sys.argv:
         QTimer.singleShot(100, window.oneClickLogin)
         logging.info("检测到自动登陆参数，将启动一键登陆模式")
+
+    # 注册退出时恢复设置的函数
+    atexit.register(window.restoreOriginalSettings)
 
     sys.exit(app.exec())
 

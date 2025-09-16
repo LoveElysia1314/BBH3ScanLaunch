@@ -57,14 +57,45 @@ class ConfigManager:
         self.bh_info = {}
         self.data = {}
         self.cap = None
+        # 运行期临时覆盖（不落盘，仅当前进程生效）
+        self._temp_mode = False
+        self._temp_overrides = {}
         # 从权威源获取版本
         self.current_version = _get_version_manager().get_version_info("current")
-
         # 初始化 oa_token 和 bh_ver 属性
         self.oa_token = None
         self.bh_ver = None
-
         self.config = self._load_config()
+
+    # ---------------- 运行期临时配置覆盖（避免误持久化） ----------------
+    def begin_temp_overrides(self, overrides: dict):
+        """
+        启用临时覆盖：仅在内存中生效，不修改 self.config，不写入磁盘。
+        仅接受 DEFAULT_CONFIG 中定义的键。
+        """
+        if not isinstance(overrides, dict):
+            return
+        self._temp_overrides = {
+            k: v for k, v in overrides.items() if k in self.DEFAULT_CONFIG
+        }
+        self._temp_mode = True
+
+    def clear_temp_overrides(self):
+        """关闭临时覆盖，恢复为纯 self.config 视图"""
+        self._temp_overrides.clear()
+        self._temp_mode = False
+
+    def get_effective_config(self) -> dict:
+        """
+        获取“有效配置”视图：
+        - 在 temp_mode 下 = config + overrides 的合并视图；
+        - 非 temp_mode 下 = config 本身。
+        返回新 dict，调用方修改不会影响内部状态。
+        """
+        base = self.config.copy()
+        if self._temp_mode and self._temp_overrides:
+            base.update(self._temp_overrides)
+        return base
 
     def _load_config(self):
         """加载配置文件"""

@@ -3,8 +3,7 @@
 依赖注入容器
 集中管理全局实例，避免重复导入和循环依赖
 """
-import logging
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
 # 延迟导入，避免循环依赖
 _version_manager = None
@@ -60,10 +59,6 @@ class DependencyContainer:
             else:
                 raise ValueError(f"Service '{service_name}' not found in container")
         return self._services[service_name]
-
-    def register(self, service_name: str, service_instance: Any) -> None:
-        """注册服务实例"""
-        self._services[service_name] = service_instance
 
 
 # 全局依赖注入容器实例

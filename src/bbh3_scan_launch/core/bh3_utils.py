@@ -96,11 +96,25 @@ class WindowCapture:
     @handle_exceptions("窗口捕获出错", None)
     def capture_window(self):
         """截取整个游戏窗口画面（支持后台窗口）"""
-        if not self.hwnd and not self._find_window():
+        # 若无句柄或句柄已无效，尝试重新查找
+        try:
+            hwnd_valid = bool(self.hwnd) and win32gui.IsWindow(self.hwnd)
+        except Exception:
+            hwnd_valid = False
+
+        if not hwnd_valid and not self._find_window():
             logging.debug("无法获取窗口句柄，截图失败")
             return None
 
         left, top, right, bot = win32gui.GetWindowRect(self.hwnd)
+        # 二次校验：获取窗口矩形失败时，尝试刷新句柄
+        try:
+            left, top, right, bot = win32gui.GetWindowRect(self.hwnd)
+        except Exception:
+            if not self._find_window():
+                logging.debug("窗口句柄无效且刷新失败，截图终止")
+                return None
+            left, top, right, bot = win32gui.GetWindowRect(self.hwnd)
         width, height = right - left, bot - top
         logging.debug(f"窗口尺寸: {width}x{height}")
 
@@ -112,6 +126,13 @@ class WindowCapture:
         saveDC.SelectObject(saveBitMap)
 
         windll.user32.PrintWindow(self.hwnd, saveDC.GetSafeHdc(), 0)
+        # PrintWindow 可能在句柄刚失效时返回黑屏；重试一次
+        try:
+            windll.user32.PrintWindow(self.hwnd, saveDC.GetSafeHdc(), 0)
+        except Exception as e:
+            logging.debug(f"PrintWindow 调用失败，尝试刷新句柄后重试: {e}")
+            if self._find_window():
+                windll.user32.PrintWindow(self.hwnd, saveDC.GetSafeHdc(), 0)
 
         bmpinfo = saveBitMap.GetInfo()
         bmpstr = saveBitMap.GetBitmapBits(True)
