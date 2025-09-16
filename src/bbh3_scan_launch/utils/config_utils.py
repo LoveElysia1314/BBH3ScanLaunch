@@ -131,18 +131,14 @@ class ConfigManager:
         检查程序更新。
         可以传递 source 参数来指定版本信息和文件的来源。
         """
-        # 获取远程版本信息
-        if not network_manager.fetch_remote_files(source=source):
+        # 获取远程版本信息（不保存文件）
+        remote_version_info = network_manager.get_remote_version_info(source=source)
+        if not remote_version_info:
             return {"has_update": False, "error": "无法获取远程版本信息"}
-
-        if not network_manager.version_info:
-            return {"has_update": False, "error": "版本信息为空"}
 
         # 比较版本
         current_version = version_manager.get_version_info("current")
-        remote_version = network_manager.version_info.get("app_info", {}).get(
-            "version", "0.0.0"
-        )
+        remote_version = remote_version_info.get("app_info", {}).get("version", "0.0.0")
 
         # 简单版本比较
         def version_tuple(v):
@@ -156,7 +152,16 @@ class ConfigManager:
             "remote_version": remote_version,
         }
 
-        if has_update:
+        # 只要远程版本不低于当前版本，就更新本地文件
+        should_update_files = version_tuple(remote_version) >= version_tuple(
+            current_version
+        )
+
+        if should_update_files:
+            # 更新本地文件
+            if not network_manager.fetch_remote_files(source=source):
+                return {"has_update": False, "error": "无法更新本地文件"}
+
             # 获取下载链接
             download_links = network_manager.source_manager.get_links_by_category(
                 "download_url"

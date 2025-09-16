@@ -102,6 +102,63 @@ class NetworkManager:
             logging.error(f"保存文件失败: {str(e)}")
             return False
 
+    def get_remote_version_info(self, source=None):
+        """获取远程版本信息，但不保存到本地文件"""
+        try:
+            source_priority = self.source_manager.normalize_source_input(source)
+
+            # 优先尝试使用本地配置中的version_url源
+            version_urls = []
+            version_sources = self.source_manager.get_links_by_category("version_url")
+
+            if version_sources:
+                # 使用本地配置中的源
+                for source_name in source_priority:
+                    if source_name in version_sources:
+                        version_urls.append(
+                            {
+                                "name": source_name,
+                                "url": version_sources[source_name],
+                                "type": "configured",
+                            }
+                        )
+                logging.debug("使用本地配置的version.json获取源")
+            else:
+                # 回退到硬编码源（兜底逻辑）
+                logging.warning("本地配置中无version_url源，使用硬编码回退逻辑")
+                for source_name in source_priority:
+                    if source_name == "gitee":
+                        version_urls.append(
+                            {
+                                "name": "gitee",
+                                "url": "https://gitee.com/LoveElysia1314/BBH3ScanLaunch/raw/main/updates/version.json",
+                                "type": "hardcoded",
+                            }
+                        )
+                    elif source_name == "github":
+                        version_urls.append(
+                            {
+                                "name": "github",
+                                "url": "https://raw.githubusercontent.com/LoveElysia1314/BBH3ScanLaunch/main/updates/version.json",
+                                "type": "hardcoded",
+                            }
+                        )
+
+            # 获取远程version.json（不保存）
+            for source_info in version_urls:
+                result = self.fetch_from_source(source_info["url"], timeout=10)
+                if result and result["success"]:
+                    remote_version_info = json.loads(result["text"])
+                    logging.info(
+                        f"成功从 {source_info['name']} 获取远程版本信息 ({source_info['type']})"
+                    )
+                    return remote_version_info
+
+            return None
+        except Exception as e:
+            logging.error(f"获取远程版本信息失败: {str(e)}")
+            return None
+
     def fetch_remote_files(self, source=None):
         """从远程获取version.json和changelog.txt"""
         try:
