@@ -32,13 +32,10 @@ app = None
 
 # 获取默认版本信息（使用最新的支持版本）
 oa_versions = version_manager.get_version_info("oa_versions")
-if oa_versions:
-    default_bh_ver = max(oa_versions.keys())
-    BH_VER = default_bh_ver  # 当前崩坏三版本
-    OA_TOKEN = version_manager.get_oa_token_for_version(default_bh_ver)  # 当前oa_token
-else:
-    BH_VER = "8.4.0"  # 默认版本
-    OA_TOKEN = "e257aaa274fb2239094cbe64d9f5ee3e"  # 默认token
+BH_VER = (
+    max(oa_versions.keys()) if oa_versions else version_manager.DEFAULT_BHVER
+)  # 当前崩坏三版本
+OA_TOKEN = version_manager.get_oa_token_for_version(BH_VER)  # 当前oa_token
 
 
 # ========== 更新下载线程 ==========
@@ -53,43 +50,15 @@ class UpdateDownloadThread(QThread):
             if self.isInterruptionRequested():
                 return
 
-            self.update_status.emit("正在选择最佳下载源...")
-
-            # 执行下载源选择和浏览器打开操作
-            success = network_manager.open_best_download_in_browser(
-                package_name="BBH3ScanLaunch_Setup.exe",
-                tag="latest",
-                source_priority=["gitee", "github"],
-                strategy="fastest",
-            )
-
-            # 再次检查是否已被请求停止
-            if self.isInterruptionRequested():
-                return
-
-            if success:
-                self.update_status.emit("下载链接已打开，请在浏览器中下载")
-            else:
-                self.update_status.emit("无法打开下载链接，请手动访问项目发布页")
-
-        except Exception as e:
-            logging.error(f"更新下载失败: {e}")
-            self.update_status.emit("更新下载失败，请稍后重试")
-
-
-# ========== 更新下载线程 ==========
-class UpdateDownloadThread(QThread):
-    """后台线程：处理更新下载"""
-
-    update_status = Signal(str)  # 发送状态更新信号
-
-    def run(self):
-        try:
             self.update_status.emit("正在准备下载...")
             from .utils.network_utils import network_manager
 
             # 尝试按优先级下载
             success = network_manager.try_download_by_priority()
+
+            # 再次检查是否已被请求停止
+            if self.isInterruptionRequested():
+                return
 
             if success:
                 self.update_status.emit("已在浏览器中打开下载链接")
@@ -242,11 +211,12 @@ class LoginThread(QThread):
                 logging.info("账号或密码错误！")
             else:
                 logging.info(f"原始返回：{bs_info['message']}")
+
         if "need_captch" in bs_info:
             logging.info("需要验证码！请打开下方网址进行操作！")
             logging.info(f"{bs_info['cap_url']}")
             webbrowser.open_new(bs_info["cap_url"])
-        else:
+        elif "message" not in bs_info:
             logging.info(f"登陆失败！{bs_info}")
 
     def run(self):
@@ -274,35 +244,35 @@ class ParseThread(QThread):
                 config = config_manager.config
 
                 # 处理自动点击
-                if config["auto_click"]:
-                    if not self.is_admin():
-                        # 管理员权限检查只打印一次警告
-                        if not hasattr(self, "admin_warning_printed"):
-                            logging.debug("没有管理员权限，跳过图形识别和点击")
-                            self.admin_warning_printed = True
-                    elif is_game_window_exist():
-                        image_processor.match_and_click()
+                if config["auto_click"] and self.is_admin() and is_game_window_exist():
+                    image_processor.match_and_click()
+                elif (
+                    config["auto_click"]
+                    and not self.is_admin()
+                    and not hasattr(self, "admin_warning_printed")
+                ):
+                    logging.debug("没有管理员权限，跳过图形识别和点击")
+                    self.admin_warning_printed = True
 
                 # 处理自动截屏
-                if config["auto_clip"]:
-                    if is_game_window_exist():
-                        screenshot = image_processor.capture_screen()
-                        if screenshot:
-                            qr_parsed = await image_processor.parse_qr_code(
-                                image_source="game_window",
-                                config=config,
-                                bh_info=config_manager.bh_info,
-                            )
-                            if qr_parsed:
-                                if config["auto_click"]:
-                                    logging.info("扫码成功，4秒后将自动点击窗口中心")
-                                    await asyncio.sleep(4)
-                                    click_center_of_game_window()
-                                if config["auto_close"]:
-                                    logging.info("已启用自动退出，2秒后将关闭扫码器")
-                                    await asyncio.sleep(2)
-                                    self.exit_app.emit()
-                                    return
+                if config["auto_clip"] and is_game_window_exist():
+                    screenshot = image_processor.capture_screen()
+                    if screenshot:
+                        qr_parsed = await image_processor.parse_qr_code(
+                            image_source="game_window",
+                            config=config,
+                            bh_info=config_manager.bh_info,
+                        )
+                        if qr_parsed:
+                            if config["auto_click"]:
+                                logging.info("扫码成功，4秒后将自动点击窗口中心")
+                                await asyncio.sleep(4)
+                                click_center_of_game_window()
+                            if config["auto_close"]:
+                                logging.info("已启用自动退出，2秒后将关闭扫码器")
+                                await asyncio.sleep(2)
+                                self.exit_app.emit()
+                                return
 
                 # 处理剪贴板检查：无论是否开启自动截图，只要已登录就尝试从剪贴板识别二维码
                 if config.get("account_login", False):
@@ -462,29 +432,31 @@ class SelfMainWindow(QMainWindow):
 
     def launchGame(self):
         config = config_manager.config
-        if config.get("game_path"):
-            try:
-                # 启动游戏进程
-                proc = subprocess.Popen([config["game_path"]])
-                logging.info("正在启动崩坏3...")
-                # 提升进程优先级（仅限Windows）
-                try:
-                    import psutil
-                    import time
-
-                    # 等待进程启动，获取进程对象
-                    time.sleep(0.5)  # 稍微等待进程稳定
-                    p = psutil.Process(proc.pid)
-                    # 设置为高优先级（psutil.HIGH_PRIORITY_CLASS）
-                    p.nice(psutil.HIGH_PRIORITY_CLASS)
-                    logging.info("已将游戏进程优先级提升为高")
-                except Exception as e:
-                    logging.warning(f"提升进程优先级失败: {e}")
-            except Exception as e:
-                logging.error(f"启动失败: {str(e)}")
-        else:
+        game_path = config.get("game_path")
+        if not game_path:
             logging.info("请先配置游戏路径！")
             QMessageBox.warning(self, "路径未配置", "请先配置游戏路径！")
+            return
+
+        try:
+            # 启动游戏进程
+            proc = subprocess.Popen([game_path])
+            logging.info("正在启动崩坏3...")
+            # 提升进程优先级（仅限Windows）
+            try:
+                import psutil
+                import time
+
+                # 等待进程启动，获取进程对象
+                time.sleep(0.5)  # 稍微等待进程稳定
+                p = psutil.Process(proc.pid)
+                # 设置为高优先级（psutil.HIGH_PRIORITY_CLASS）
+                p.nice(psutil.HIGH_PRIORITY_CLASS)
+                logging.info("已将游戏进程优先级提升为高")
+            except Exception as e:
+                logging.warning(f"提升进程优先级失败: {e}")
+        except Exception as e:
+            logging.error(f"启动失败: {str(e)}")
 
     def oneClickLogin(self, skip_launch=False):
         """
@@ -643,40 +615,82 @@ def main():
 
     window.show()
 
-    # 自动检查更新异步执行（延迟1秒）
-    QTimer.singleShot(1000, window.check_and_display_updates)
+    # Flask 应用设置（回退到v1.3.2：启动时直接启动Flask线程）
+    template_dir = os.path.join(
+        os.path.dirname(__file__), "..", "..", "resources", "templates"
+    )
+    fapp = Flask(__name__, template_folder=template_dir)
+    log = logging.getLogger("werkzeug")
+    log.setLevel(logging.ERROR)
+    cli = sys.modules["flask.cli"]
+    cli.show_server_banner = lambda *x: None
 
-    # 自动登录异步执行（延迟1.5秒，避免阻塞UI）
+    @fapp.route("/")
+    def index():
+        return render_template("index.html")
+
+    @fapp.route("/geetest")
+    def geetest():
+        return render_template("geetest.html")
+
+    @fapp.route("/ret", methods=["POST"])
+    def ret():
+        if not request.json:
+            logging.info("请求错误")
+            abort(400)
+        input_data = request.json
+        logging.debug(f"Input = {input_data}")
+        config_manager.cap = input_data
+        login_accept()
+        return "1"
+
+    flaskThread = Thread(
+        target=fapp.run,
+        daemon=True,
+        kwargs={
+            "host": "0.0.0.0",
+            "port": 12983,
+            "threaded": True,
+            "use_reloader": False,
+            "debug": False,
+        },
+    )
+    flaskThread.start()
+
+    # --- 在显示窗口前应用配置 ---
+    # 尝试自动登录
     if config["account"]:
-        logging.info("配置文件已有账号，异步尝试登陆中...")
-        QTimer.singleShot(1500, login_accept)
+        logging.info("配置文件已有账号，尝试登陆中...")
+        # 注意：此时UI控件已创建，可以安全调用
+        login_accept()
 
-    # Flask服务按需启动：首次需要验证码时再启动
-    def start_flask_server():
-        template_dir = os.path.join(
-            os.path.dirname(__file__), "..", "..", "resources", "templates"
-        )
-        fapp = Flask(__name__, template_folder=template_dir)
-        log = logging.getLogger("werkzeug")
-        log.setLevel(logging.ERROR)
-        cli = sys.modules["flask.cli"]
+    # 应用配置到UI控件 (移到 setupUi 之后)
+    for checkbox, feature, prefix in [
+        (ui.clipCheck, "clip_check", "当前状态"),
+        (ui.autoClose, "auto_close", "当前状态"),
+        (ui.autoClip, "auto_clip", "当前状态"),
+        (ui.autoClick, "auto_click", "当前状态"),
+        (ui.debugPrint, "debug_print", "当前状态"),
+    ]:
+        # 使用 config.get 并提供默认值 False，确保不会因键缺失出错
+        checkbox.setChecked(config.get(feature, False))
+        window.update_status_text(checkbox, prefix)
 
-        flaskThread = Thread(
-            target=fapp.run,
-            daemon=True,
-            kwargs={
-                "host": "0.0.0.0",
-                "port": 12983,
-                "threaded": True,
-                "use_reloader": False,
-                "debug": False,
-            },
-        )
-        flaskThread.start()
-        logging.info("Flask服务已启动")
+    # 更新游戏路径按钮文本
+    ui.configGamePathBtn.setText(
+        "路径已配置" if config.get("game_path") else "点击配置"
+    )
 
-    # 提供全局按需启动入口
-    window.start_flask_server = start_flask_server
+    # 显示窗口
+    window.show()
+
+    # 程序启动时自动检查更新（不弹窗）
+    window.check_and_display_updates()
+
+    # 处理命令行参数
+    if "--auto-login" in sys.argv:
+        QTimer.singleShot(100, window.oneClickLogin)
+        logging.info("检测到自动登陆参数，将启动一键登陆模式")
 
     sys.exit(app.exec())
 

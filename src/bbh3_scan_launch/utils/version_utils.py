@@ -61,11 +61,9 @@ class VersionManager:
     def _load_version_from_file(self) -> str:
         """从version.json加载远程版本"""
         try:
-            if os.path.exists(self.VERSION_CONFIG_PATH):
-                with open(self.VERSION_CONFIG_PATH) as f:
-                    data = json.load(f)
-                    return data.get("app_info", {}).get("version", self.DEFAULT_VERSION)
-            return self.DEFAULT_VERSION
+            with open(self.VERSION_CONFIG_PATH) as f:
+                data = json.load(f)
+                return data.get("app_info", {}).get("version", self.DEFAULT_VERSION)
         except (JSONDecodeError, IOError) as e:
             logging.warning(f"读取版本文件失败: {e}")
             return self.DEFAULT_VERSION
@@ -97,15 +95,11 @@ class VersionManager:
 
     def get_oa_token_for_version(self, bh_ver: str) -> str:
         """根据游戏版本获取对应的oa_token"""
-        if bh_ver in self.oa_versions:
-            return self.oa_versions[bh_ver].get("oa_token", self.DEFAULT_OATOKEN)
-        return self.DEFAULT_OATOKEN
+        return self.oa_versions.get(bh_ver, {}).get("oa_token", self.DEFAULT_OATOKEN)
 
     def get_dispatch_for_version(self, bh_ver: str) -> str:
         """根据游戏版本获取对应的dispatch"""
-        if bh_ver in self.oa_versions:
-            return self.oa_versions[bh_ver].get("dispatch", "")
-        return ""
+        return self.oa_versions.get(bh_ver, {}).get("dispatch", "")
 
     def has_version_support(self, bh_ver: str) -> bool:
         """检查是否支持指定的游戏版本"""

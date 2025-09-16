@@ -81,15 +81,14 @@ class NetworkManager:
             response = requests.get(
                 url, timeout=timeout, headers={"User-Agent": "Mozilla/5.0"}
             )
-            if response.status_code == 200:
-                return {
-                    "text": response.text,
-                    "success": True,
-                    "status_code": response.status_code,
-                }
+            response.raise_for_status()  # 自动检查HTTP状态码
+            return {
+                "text": response.text,
+                "success": True,
+                "status_code": response.status_code,
+            }
         except Exception:
-            pass
-        return {"success": False}
+            return {"success": False}
 
     def save_to_local(self, content, file_path):
         """保存内容到本地文件"""

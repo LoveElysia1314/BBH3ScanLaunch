@@ -26,10 +26,11 @@ def is_game_window_exist():
     try:
 
         def enum_windows(hwnd, results):
-            if win32gui.IsWindowVisible(hwnd):
-                title = win32gui.GetWindowText(hwnd)
-                if title == GAME_WINDOW_TITLE:
-                    results.append(True)
+            if (
+                win32gui.IsWindowVisible(hwnd)
+                and win32gui.GetWindowText(hwnd) == GAME_WINDOW_TITLE
+            ):
+                results.append(True)
 
         results = []
         win32gui.EnumWindows(enum_windows, results)
@@ -64,20 +65,19 @@ def active_game_window():
 
 def click_center_of_game_window():
     """点击崩坏3游戏窗口中心位置"""
-    if is_game_window_exist():
-        hwnd = win32gui.FindWindow(None, GAME_WINDOW_TITLE)
-        if not hwnd:
-            logging.info("未找到游戏窗口")
-            return
+    hwnd = win32gui.FindWindow(None, GAME_WINDOW_TITLE)
+    if not hwnd or not is_game_window_exist():
+        logging.info("未找到游戏窗口")
+        return
 
-        left, top, right, bottom = win32gui.GetWindowRect(hwnd)
-        width = right - left
-        height = bottom - top
-        center_x = left + width // 2
-        center_y = top + height // 2
+    left, top, right, bottom = win32gui.GetWindowRect(hwnd)
+    width = right - left
+    height = bottom - top
+    center_x = left + width // 2
+    center_y = top + height // 2
 
-        pyautogui.click(center_x, center_y)
-        logging.debug(f"已点击窗口中心: ({center_x}, {center_y})")
+    pyautogui.click(center_x, center_y)
+    logging.debug(f"已点击窗口中心: ({center_x}, {center_y})")
 
 
 class WindowCapture:

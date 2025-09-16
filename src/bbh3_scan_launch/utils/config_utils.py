@@ -57,11 +57,6 @@ class ConfigManager:
             os.path.dirname(__file__), "..", "..", "..", "config", "config.json"
         )
 
-        # 如果配置文件不存在，创建默认配置
-        if not os.path.isfile(config_path):
-            self.write_conf()
-            return self.DEFAULT_CONFIG.copy()
-
         try:
             with open(config_path) as fp:
                 loaded_config = json.load(fp)
