@@ -2,23 +2,22 @@
 import ctypes
 import sys
 import asyncio
-import subprocess
 import webbrowser
 import atexit
 from threading import Thread
-from flask import Flask
+from flask import Flask, abort, render_template, request
 import logging
 from PySide6.QtCore import QThread, Signal, QTimer, QObject
 from PySide6.QtGui import QIcon
-from PySide6.QtWidgets import QApplication, QMainWindow, QFileDialog, QMessageBox
+from PySide6.QtWidgets import QApplication, QMainWindow, QFileDialog
 from .core.sdk import bsgamesdk
 from .core.sdk import mihoyosdk
 from .gui import main_window as mainWindow
 from .core.bh3_utils import (
     image_processor,
-    is_game_window_exist,
     click_center_of_game_window,
 )
+from .core.bh3_utils import BH3GameManager
 from .constants import TEMPLATE_WEB_DIR
 from .utils.exception_utils import handle_exceptions
 
@@ -38,6 +37,7 @@ version_manager = get_version_manager()
 ui = None
 window = None
 app = None
+game_manager = BH3GameManager()
 
 # 获取默认版本信息（使用最新的支持版本）
 oa_versions = version_manager.get_version_info("oa_versions")
@@ -131,8 +131,12 @@ class LoginThread(QThread):
                 bs_info = await bsgamesdk.login(
                     config["account"], config["password"], config_manager.cap
                 )
-                if not bs_info or "access_key" not in bs_info:
-                    self.handle_login_failure(bs_info or {})
+                if not bs_info:
+                    logging.error("登录请求失败，返回结果为空")
+                    self.login_complete.emit(False)
+                    return
+                if "access_key" not in bs_info:
+                    self.handle_login_failure(bs_info)
                     # 发出信号，即使失败也要通知主线程登录流程结束
                     self.login_complete.emit(False)
                     return
@@ -158,8 +162,12 @@ class LoginThread(QThread):
             bs_info = await bsgamesdk.login(
                 config["account"], config["password"], config_manager.cap
             )
-            if not bs_info or "access_key" not in bs_info:
-                self.handle_login_failure(bs_info or {})
+            if not bs_info:
+                logging.error("登录请求失败，返回结果为空")
+                self.login_complete.emit(False)
+                return
+            if "access_key" not in bs_info:
+                self.handle_login_failure(bs_info)
                 # 发出信号，即使失败也要通知主线程登录流程结束
                 self.login_complete.emit(False)
                 return
@@ -226,6 +234,10 @@ class LoginThread(QThread):
         self.login_complete.emit(True)
 
     def handle_login_failure(self, bs_info):
+        if not bs_info:
+            logging.error("登录失败：未收到有效的响应数据")
+            return
+
         # 如果使用了验证码但仍然登录失败，说明验证码正确但账号密码错误
         if config_manager.cap is not None and "access_key" not in bs_info:
             logging.info("验证码验证成功，但账号或密码错误！")
@@ -286,61 +298,12 @@ class ParseThread(QThread):
 
     async def periodic_check(self):
         """定期执行检查任务"""
-        while not self.should_stop:
-            try:
-                # 每次循环都获取“有效配置”（考虑临时覆盖）
-                config = config_manager.get_effective_config()
-
-                # 处理自动点击
-                if (
-                    config.get("auto_click")
-                    and self.is_admin()
-                    and is_game_window_exist()
-                ):
-                    image_processor.match_and_click()
-                elif (
-                    config.get("auto_click")
-                    and not self.is_admin()
-                    and not hasattr(self, "admin_warning_printed")
-                ):
-                    logging.debug("没有管理员权限，跳过图形识别和点击")
-                    self.admin_warning_printed = True
-
-                # 处理自动截屏
-                if config.get("auto_clip") and is_game_window_exist():
-                    screenshot = image_processor.capture_screen()
-                    if screenshot:
-                        qr_parsed = await image_processor.parse_qr_code(
-                            image_source="game_window",
-                            config=config,
-                            bh_info=config_manager.bh_info,
-                        )
-                        if qr_parsed:
-                            if config.get("auto_click"):
-                                logging.info("扫码成功，4秒后将自动点击窗口中心")
-                                await asyncio.sleep(4)
-                                click_center_of_game_window()
-                            if config.get("auto_close"):
-                                logging.info("已启用自动退出，2秒后将关闭扫码器")
-                                await asyncio.sleep(2)
-                                self.exit_app.emit()
-                                return
-
-                # 处理剪贴板检查：无论是否开启自动截图，只要已登录就尝试从剪贴板识别二维码
-                if config.get("account_login", False):
-                    await image_processor.parse_qr_code(
-                        image_source="clipboard",
-                        config=config,
-                        bh_info=config_manager.bh_info,
-                    )
-
-                # 根据配置的间隔时间等待
-                await asyncio.sleep(config["sleep_time"])
-
-            except Exception as e:
-                logging.error(f"检查过程中发生错误: {str(e)}")
-                # 短暂等待后继续，避免频繁报错
-                await asyncio.sleep(1)
+        await game_manager.auto_monitor(
+            config_manager.get_effective_config(),
+            image_processor,
+            click_center_of_game_window,
+            self.exit_app.emit if hasattr(self, 'exit_app') else None
+        )
 
     def run(self):
         asyncio.run(self.periodic_check())
@@ -348,13 +311,19 @@ class ParseThread(QThread):
 
 # ========== 登陆按钮点击回调 ==========
 def login_accept():
+    # 仅在手动登录时清除缓存，自动登录不受影响
+    if hasattr(window, "is_manual_login") and window.is_manual_login:
+        config = config_manager.config
+        config["access_key"] = ""
+        config["uid"] = ""
+        config["uname"] = ""
+        config["last_login_succ"] = False
+        config_manager.write_conf(config)
+        window.is_manual_login = False  # 重置标志
     # 创建并启动登录线程
     ui.backendLogin = LoginThread()
-    # 将线程日志转发到 logging（再由 GUI 处理器显示）
     ui.backendLogin.update_log.connect(lambda s: logging.info(s))
-    # 连接登录完成信号到主窗口的处理函数
     ui.backendLogin.login_complete.connect(window.handle_login_complete)
-    # 连接登录完成信号到启动解析线程的函数
     ui.backendLogin.login_complete.connect(start_parse_thread_after_login)
     ui.backendLogin.start()
 
@@ -458,11 +427,16 @@ class SelfMainWindow(QMainWindow):
         dialog.password.textChanged.connect(self.deal_config_update("password"))
         dialog.show()
         dialog.accepted.connect(login_accept)
+        # 标记为手动登录
+        self.is_manual_login = True
 
     def deal_config_update(self, key):
         def update(value):
             config = config_manager.config
             config[key] = value
+            # 当账号或密码改变时，强制标记为未登录，防止使用缓存（重要：确保用户能登录其他账号）
+            if key in ["account", "password"]:
+                config["last_login_succ"] = False
             config_manager.write_conf(config)
 
         return update
@@ -486,57 +460,47 @@ class SelfMainWindow(QMainWindow):
             config_manager.write_conf(config)
             ui.configGamePathBtn.setText("路径已配置")
 
-    @handle_exceptions("启动游戏失败", None)
     def launchGame(self):
-        config = config_manager.config
-        game_path = config.get("game_path")
-        if not game_path:
-            logging.info("请先配置游戏路径！")
-            QMessageBox.warning(self, "路径未配置", "请先配置游戏路径！")
-            return
-
-        # 启动游戏进程
-        logging.info("正在启动崩坏3...")
+        game_manager.launch_game()
 
     def oneClickLogin(self, skip_launch=False):
         """
         一键登录模式，支持跳过游戏启动（防止重复打开游戏）
         :param skip_launch: 如果为 True，则不执行 launchGame
         """
-        if not skip_launch:
-            self.launchGame()
-        self.temp_mode = True
-        # 记录原始设置用于UI复原（不持久化）
-        base_config = config_manager.config
-        self.prev_settings = {
-            k: base_config.get(k, False)
-            for k in [
-                "clip_check",
-                "auto_clip",
-                "auto_close",
-                "auto_click",
-                "debug_print",
-            ]
-        }
-        # 启用临时覆盖（不写入文件）
-        config_manager.begin_temp_overrides(
-            {
-                "clip_check": True,
-                "auto_clip": True,
-                "auto_close": True,
-                "auto_click": True,
-                "debug_print": True,
+        if game_manager.one_click_login(skip_launch=skip_launch):
+            self.temp_mode = True
+            # 记录原始设置用于UI复原（不持久化）
+            base_config = config_manager.config
+            self.prev_settings = {
+                k: base_config.get(k, False)
+                for k in [
+                    "clip_check",
+                    "auto_clip",
+                    "auto_close",
+                    "auto_click",
+                    "debug_print",
+                ]
             }
-        )
-        for checkbox, prefix in [
-            (ui.clipCheck, "当前"),
-            (ui.autoClip, "当前"),
-            (ui.autoClose, "当前"),
-            (ui.autoClick, "当前"),
-        ]:
-            checkbox.setChecked(True)
-            self.update_status_text(checkbox, prefix)
-        logging.info("一键进入舰桥模式已启用")
+            # 启用临时覆盖（不写入文件）
+            config_manager.begin_temp_overrides(
+                {
+                    "clip_check": True,
+                    "auto_clip": True,
+                    "auto_close": True,
+                    "auto_click": True,
+                    "debug_print": True,
+                }
+            )
+            for checkbox, prefix in [
+                (ui.clipCheck, "当前"),
+                (ui.autoClip, "当前"),
+                (ui.autoClose, "当前"),
+                (ui.autoClick, "当前"),
+            ]:
+                checkbox.setChecked(True)
+                self.update_status_text(checkbox, prefix)
+            logging.info("一键进入舰桥模式已启用")
 
     def restoreOriginalSettings(self):
         if not self.temp_mode:
@@ -622,6 +586,7 @@ def main():
     """运行应用程序的核心逻辑"""
     # 设置全局变量
     global ui, window, app
+    global auto_login_triggered
 
     logging.basicConfig(
         level=logging.INFO,
@@ -643,8 +608,10 @@ def main():
     handler = GuiHandler(ui.logText)
     logging.getLogger().addHandler(handler)
 
-    # 处理一键进入舰桥参数（提前处理，防止阻塞）
-    if "--auto-login" in sys.argv:
+    # 只允许 auto-login 参数自动触发一次登录流程
+    auto_login_triggered = False
+    if "--auto-login" in sys.argv and not auto_login_triggered:
+        auto_login_triggered = True
         QTimer.singleShot(100, lambda: window.oneClickLogin(skip_launch=False))
         logging.info("检测到自动登陆参数，将启动一键进入舰桥模式")
 
@@ -669,6 +636,29 @@ def main():
     fapp = Flask(__name__, template_folder=TEMPLATE_WEB_DIR)
     log = logging.getLogger("werkzeug")
     log.setLevel(logging.ERROR)
+
+    # Flask 路由定义（重要：删除会导致验证码网页 Not Found）
+    @fapp.route("/")
+    def index():
+        return render_template("index.html")
+
+    @fapp.route("/geetest")
+    def geetest():
+        return render_template("geetest.html")
+
+    @fapp.route("/ret", methods=["POST"])
+    def ret():
+        if not request.json:
+            logging.info("请求错误")
+            abort(400)
+        input_data = request.json
+        logging.debug(f"验证码数据接收: {input_data}")
+        config_manager.cap = input_data
+        # 延迟调用login_accept，避免与当前请求冲突
+        import threading
+
+        threading.Timer(1.0, login_accept).start()
+        return "1"
 
     flaskThread = Thread(
         target=fapp.run,

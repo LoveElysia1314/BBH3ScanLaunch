@@ -9,3 +9,5 @@ pyzbar
 pywin32
 cryptography
 requests
+markdown
+psutil

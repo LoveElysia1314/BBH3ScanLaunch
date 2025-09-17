@@ -17,6 +17,7 @@ from PySide6.QtWidgets import (
     QPushButton,
     QCheckBox,
 )
+import markdown
 
 # 使用依赖注入容器获取管理器实例
 from ..dependency_container import get_version_manager, get_config_manager
@@ -170,7 +171,10 @@ class Ui_MainWindow:
         helpLayout = QVBoxLayout(self.helpTab)
         self.helpText = QTextBrowser()
         self.helpText.setOpenExternalLinks(True)
-        self.helpText.setHtml(self.get_help_text())
+        # 将Markdown转换为HTML并设置
+        help_markdown = self.get_help_text()
+        help_html = markdown.markdown(help_markdown, extensions=["extra", "codehilite"])
+        self.helpText.setHtml(help_html)
         helpLayout.addWidget(self.helpText)
         self.infoTabWidget.addTab(self.helpTab, "程序说明")
 
@@ -179,7 +183,12 @@ class Ui_MainWindow:
         changelogLayout = QVBoxLayout(self.changelogTab)
         self.changelogText = QTextBrowser()
         self.changelogText.setOpenExternalLinks(True)
-        self.changelogText.setPlainText(version_manager.read_changelog())
+        # 将Markdown转换为HTML并设置
+        changelog_markdown = version_manager.read_changelog()
+        changelog_html = markdown.markdown(
+            changelog_markdown, extensions=["extra", "codehilite"]
+        )
+        self.changelogText.setHtml(changelog_html)
         changelogLayout.addWidget(self.changelogText)
         self.infoTabWidget.addTab(self.changelogTab, "更新日志")
 
@@ -301,16 +310,44 @@ class Ui_MainWindow:
         layout.addWidget(self.updateGroup)
 
     def get_help_text(self):
-        """返回程序使用说明的HTML格式文本"""
+        """返回程序使用说明的Markdown格式文本"""
         return (
-            "第一次使用需要点击登陆按钮登陆B站账号，账号密码会储存在配置文件内；<br>"
-            '第一次使用"一键进入舰桥"（需要以管理员身份运行）需要点击"配置路径"并选择"BH3.exe\；<br>'
-            '"BH3.exe"参考路径：C:\\miHoYo Launcher\\games\\Honkai Impact 3rd Game\\BH3.exe；<br>'
-            "“解析二维码”会读取剪贴板中崩坏3登陆码并扫码；<br>"
-            "“自动截屏”会自动截取崩坏3窗口，不论其在前台还是后台；<br>"
-            "“自动退出”会在完成扫码后自动退出程序；<br>"
-            "“自动点击”（需要以管理员身份运行）会自动将游戏登陆模式切换为扫码登陆,并在扫码后点击屏幕进入游戏。<br><br>"
-            "Powered By Hao_cen & LoveElysia1314"
+            "### 登录B站账号\n\n"
+            "- 点击“登陆B站账户”\n"
+            "- 输入账号和密码\n"
+            "- 信息会自动保存，后续可直接使用\n\n"
+            "### 配置游戏路径\n\n"
+            "- 点击“配置游戏路径”\n"
+            "- 选择 BH3.exe\n"
+            "- 参考：`C:\\miHoYo Launcher\\games\\Honkai Impact 3rd Game\\BH3.exe`\n\n"
+            "### 常用操作\n\n"
+            "- 解析二维码：自动读取剪贴板中的登录码并扫码\n"
+            "- 自动截屏：自动截取游戏画面（支持前后台）\n"
+            "- 自动退出：扫码完成后自动关闭程序\n"
+            "- 自动点击：自动切换登录方式并进入游戏（需管理员权限）\n"
+            "- DEBUG：显示详细日志，便于排查问题\n"
+            "- 打开崩坏3：直接启动游戏\n"
+            "- 一键进入舰桥：启动并自动完成登录（需管理员权限）\n\n"
+            "### 更新与下载源\n\n"
+            "- 检查更新：点击“检查更新”，启动时也会自动检查\n"
+            "- 下载源优先级：在“下载源优先级调整”中拖拽排序，自动保存\n"
+            "- 建议：国内优先 Gitee，海外优先 GitHub\n\n"
+            "### 权限与系统要求\n\n"
+            "- 管理员权限：一键进入舰桥、自动点击需要\n"
+            "- 以管理员运行：右键程序 → 以管理员身份运行\n"
+            "- 系统：Windows 10/11；需网络；建议 1920x1080 分辨率及以上\n\n"
+            "### 故障排除\n\n"
+            "- 登录失败：检查网络/账号密码，重试\n"
+            "- 找不到游戏窗口：确认已启动、未最小化，必要时重启游戏\n"
+            "- 权限不足：以管理员身份运行\n"
+            "- 更新失败：检查网络，调整下载源优先级，稍后重试\n"
+            "- 配置异常：删除 `config` 文件夹并重启，系统会重建\n\n"
+            "### 项目与支持\n\n"
+            "- 当前版本：" + version_manager.get_version_info("current") + "\n"
+            "- 项目主页：https://github.com/LoveElysia1314/BBH3ScanLaunch\n"
+            "- 问题反馈：请在项目主页提交 Issue\n\n"
+            "---\n\n"
+            "Powered by LoveElysia1314  ·  Thanks to Hao_cen\n"
         )
 
     def retranslateUi(self, MainWindow):
