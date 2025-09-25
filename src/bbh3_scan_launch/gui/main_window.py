@@ -223,6 +223,12 @@ class Ui_MainWindow:
         self.featureGroup = QGroupBox("功能设置")
         gridLayout = QGridLayout(self.featureGroup)
 
+        # 添加打开模板文件夹按钮（放在最上面）
+        label = QLabel("管理模板:")
+        self.openTemplateBtn = QPushButton("打开文件夹")
+        gridLayout.addWidget(label, 0, 0)
+        gridLayout.addWidget(self.openTemplateBtn, 0, 1)
+
         # 复选框配置
         checkboxes = [
             ("解析二维码:", "clipCheck"),
@@ -232,7 +238,9 @@ class Ui_MainWindow:
             ("DEBUG:", "debugPrint"),
         ]
 
-        for row, (label_text, attr_name) in enumerate(checkboxes):
+        for row, (label_text, attr_name) in enumerate(
+            checkboxes, start=1
+        ):  # 从第1行开始
             label = QLabel(label_text)
             checkbox = QCheckBox()
             setattr(self, attr_name, checkbox)
@@ -326,6 +334,7 @@ class Ui_MainWindow:
             "- 自动退出：扫码完成后自动关闭程序\n"
             "- 自动点击：自动切换登录方式并进入游戏（需管理员权限）\n"
             "- DEBUG：显示详细日志，便于排查问题\n"
+            "- 管理模板：打开模板图片文件夹，方便添加或管理分辨率模板\n"
             "- 打开崩坏3：直接启动游戏\n"
             "- 一键进入舰桥：启动并自动完成登录（需管理员权限）\n\n"
             "### 更新与下载源\n\n"
@@ -377,6 +386,9 @@ class Ui_MainWindow:
         self.configGamePathBtn.clicked.connect(MainWindow.configGamePath)
         self.launchGameBtn.clicked.connect(MainWindow.launchGame)
         self.oneClickLoginBtn.clicked.connect(MainWindow.oneClickLogin)
+
+        # 连接打开模板文件夹按钮
+        self.openTemplateBtn.clicked.connect(MainWindow.open_template_folder)
 
         # 连接更新组按钮信号
         self.checkUpdateBtn.clicked.connect(MainWindow.check_for_updates)

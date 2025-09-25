@@ -62,7 +62,7 @@ async def getBHVer(cache_bh_ver=None):
     )
     if feedback == cache_bh_ver:
         local_bh_ver = cache_bh_ver["bh_ver"]
-        logging.info("获取版本号失败，使用缓存版本号")
+        logging.warning("获取版本号失败，使用缓存版本号")
     else:
         local_bh_ver = feedback["version"]
     has_bh_ver = True
@@ -192,7 +192,7 @@ async def sendPost(target, data, noReturn=False):
         if noReturn:
             return
         if res is None:
-            logging.info("请求错误，正在重试...")
+            logging.debug("请求错误，正在重试...")
             return await sendPost(target, data, noReturn)
         return res.json()
     except Exception as e:
@@ -206,7 +206,7 @@ async def sendGet(target, default_ret=None):
         session = requests.Session()
         res = session.get(url=target)
         if res is None:
-            logging.info("请求错误，正在重试...")
+            logging.debug("请求错误，正在重试...")
             return await sendGet(target, default_ret)
         return res.json()
     except Exception as e:
@@ -220,7 +220,7 @@ async def sendGetRaw(target, default_ret=None):
         session = requests.Session()
         res = session.get(url=target)
         if res is None:
-            logging.info("请求错误，正在重试...")
+            logging.debug("请求错误，正在重试...")
             return await sendGetRaw(target, default_ret)
         return res.text
     except Exception as e:

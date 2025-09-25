@@ -192,16 +192,29 @@ class LoginThread(QThread):
         bh_info = await mihoyosdk.verify(bs_info["uid"], bs_info["access_key"])
         config_manager.bh_info = bh_info
         if bh_info["retcode"] != 0:
-            logging.info(f"登陆失败！{bh_info}")
+            logging.error(f"登录失败！{bh_info}")
             self.login_complete.emit(False)
             return
-        logging.info("登录成功，账号：LoveElysia1314")
-        logging.info("登陆成功！获取OA服务器信息中...")
+        logging.info("登录成功，账号：LoveElysia1314，开始获取OA服务器信息...")
         # 获取服务器版本号
         server_bh_ver = await mihoyosdk.getBHVer(BH_VER)
         # 检查版本是否匹配
         if server_bh_ver != BH_VER:
-            logging.info(f"版本不匹配 (本地: {BH_VER}, 服务器: {server_bh_ver})！")
+            logging.warning(f"版本不匹配 (本地: {BH_VER}, 服务器: {server_bh_ver})！")
+
+        # 刷新 OA 版本信息，如果为空则更新远程文件
+        version_manager.refresh_oa_info()
+        if not version_manager.oa_versions:
+            # 检查远程版本信息，确保 oa_versions 已更新
+            update_result = config_manager.check_program_update()
+            if "error" in update_result:
+                logging.error(
+                    f"获取远程版本信息失败，无法继续获取OA服务器: {update_result['error']}"
+                )
+                self.login_complete.emit(False)
+                return
+            # 重新刷新 OA 版本信息
+            version_manager.refresh_oa_info()
 
         # 检查是否有对应版本的支持
         if not version_manager.has_version_support(server_bh_ver):
@@ -454,8 +467,25 @@ class SelfMainWindow(QMainWindow):
             config_manager.write_conf(config)
             ui.configGamePathBtn.setText("路径已配置")
 
+    def launch_game_unified(self):
+        """
+        统一的游戏启动方法，包含路径检查和消息提示
+        """
+        game_manager.launch_game(show_messages=True)
+
     def launchGame(self):
-        game_manager.launch_game()
+        self.launch_game_unified()
+
+    def open_template_folder(self):
+        """打开图片模板文件夹"""
+        import os
+
+        template_dir = os.path.join(os.getcwd(), "resources", "pictures_to_match")
+        if os.path.exists(template_dir):
+            os.startfile(template_dir)
+            logging.info("已打开模板文件夹")
+        else:
+            logging.warning("模板文件夹不存在")
 
     def oneClickLogin(self, skip_launch=False):
         """

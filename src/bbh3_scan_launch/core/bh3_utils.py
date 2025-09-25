@@ -144,25 +144,10 @@ class BH3GameManager:
         :param skip_launch: 如果为 True，则不执行 launchGame
         :param show_messages: 是否显示消息框
         """
-        from ..utils.config_utils import config_manager
-
-        config = config_manager.config
-        game_path = config.get("game_path")
-        # 只在未运行时启动游戏
-        if not skip_launch and game_path:
-            if not self.is_bh3_running():
-                try:
-                    self.start_bh3()
-                    logging.info("崩坏3已启动（舰桥模式）")
-                except Exception as e:
-                    logging.error(f"启动游戏失败: {e}")
-                    if show_messages:
-                        from PySide6.QtWidgets import QMessageBox
-
-                        QMessageBox.warning(None, "启动失败", f"无法启动游戏: {e}")
-                    return False
-            else:
-                logging.info("崩坏3已在运行，无需重复启动（舰桥模式）")
+        # 如果不跳过启动，则调用统一的启动方法
+        if not skip_launch:
+            if not self.launch_game(show_messages=show_messages):
+                return False
 
         # 这里可以添加一键登录的逻辑，但由于依赖UI，可能需要外部处理
         logging.info("一键进入舰桥模式已启用")
@@ -252,7 +237,6 @@ def is_game_window_exist():
     results = []
     win32gui.EnumWindows(enum_windows, results)
     exist = bool(results)
-    logging.debug(f"游戏窗口存在检查: {'存在' if exist else '不存在'}")
     return exist
 
 
@@ -261,15 +245,12 @@ def active_game_window():
     """激活崩坏3游戏窗口并置于前台"""
     hwnd = win32gui.FindWindow(None, GAME_WINDOW_TITLE)
     if not hwnd:
-        logging.debug("未找到游戏窗口")
         return False
 
     if win32gui.IsIconic(hwnd):
-        logging.debug("恢复最小化窗口")
         win32gui.ShowWindow(hwnd, win32con.SW_RESTORE)
         time.sleep(0.5)
 
-    logging.debug("激活游戏窗口")
     win32gui.SetForegroundWindow(hwnd)
     return True
 
@@ -288,7 +269,6 @@ def click_center_of_game_window():
     center_y = top + height // 2
 
     pyautogui.click(center_x, center_y)
-    logging.debug(f"已点击窗口中心: ({center_x}, {center_y})")
 
 
 class WindowCapture:
@@ -298,7 +278,6 @@ class WindowCapture:
     """
 
     def __init__(self, window_title):
-        logging.debug(f"初始化窗口捕获器: {window_title}")
         self.window_title = window_title
         self.hwnd = None
 
@@ -306,7 +285,6 @@ class WindowCapture:
         """查找崩坏3游戏窗口句柄"""
         self.hwnd = win32gui.FindWindow(None, self.window_title)
         if self.hwnd:
-            logging.debug(f"找到窗口句柄: {self.hwnd}")
             return True
         logging.debug(f"未找到窗口: {self.window_title}")
         return False
@@ -334,7 +312,6 @@ class WindowCapture:
                 return None
             left, top, right, bot = win32gui.GetWindowRect(self.hwnd)
         width, height = right - left, bot - top
-        logging.debug(f"窗口尺寸: {width}x{height}")
 
         hwndDC = None
         mfcDC = None
@@ -422,7 +399,6 @@ class ImageProcessor:
 
     def _load_templates(self):
         """加载模板图片并缩放到当前屏幕分辨率"""
-        logging.debug("开始加载模板到内存")
         if not os.path.exists(self.template_dir):
             os.makedirs(self.template_dir, exist_ok=True)
             logging.info(f"已创建模板目录: {self.template_dir}")
@@ -471,7 +447,6 @@ class ImageProcessor:
     def capture_screen(self):
         """捕获整个崩坏3游戏窗口的灰度图像（窗口检测优化）"""
         if not is_game_window_exist():
-            logging.debug("崩坏3窗口不存在，屏幕捕获跳过")
             return None
         capturer = self._init_window_capturer()
         pil_img = capturer.capture_window()
@@ -516,7 +491,6 @@ class ImageProcessor:
 
     def match_and_click(self, threshold=0.8):
         """匹配所有模板并点击置信度最高的位置（若激活游戏窗口成功）"""
-        logging.debug("开始模板匹配点击流程")
         best_match = None
         best_confidence = 0
         screen_gray = self.capture_screen()
@@ -544,19 +518,16 @@ class ImageProcessor:
             else:
                 logging.info("游戏窗口未激活，取消点击")
                 return False
-        logging.debug("未找到符合条件的匹配")
         return False
 
     @handle_exceptions("二维码解析出错", False)
     async def parse_qr_code(self, image_source="clipboard", config=None, bh_info=None):
         """从剪贴板或游戏窗口解析二维码并完成崩坏3登录"""
         if image_source == "clipboard":
-            logging.debug("从剪贴板获取图像")
             im = ImageGrab.grabclipboard()
             if not isinstance(im, Image.Image):
                 return False
         elif image_source == "game_window":
-            logging.debug("从游戏窗口获取图像")
             capturer = self._init_window_capturer()
             im = capturer.capture_window()
             if im is None:
@@ -569,11 +540,9 @@ class ImageProcessor:
 
         result = decode(im)
         if not result:
-            logging.debug("未检测到二维码")
             return False
 
         url = result[0].data.decode("utf-8")
-        logging.debug(f"解码URL: {url}")
 
         if "ticket=" not in url:
             logging.debug("无效的二维码格式")
@@ -601,11 +570,9 @@ class ImageProcessor:
     @handle_exceptions("清空剪贴板出错")
     def clear_clipboard(self):
         """清空系统剪贴板内容"""
-        logging.debug("清空剪贴板")
         if windll.user32.OpenClipboard(None):
             windll.user32.EmptyClipboard()
             windll.user32.CloseClipboard()
-            logging.debug("剪贴板已清空")
 
 
 # 初始化全局实例

@@ -234,26 +234,3 @@ class ConfigManager:
 
 # 创建配置管理器实例
 config_manager = ConfigManager()
-
-# 使用示例 (如果需要独立运行此脚本进行测试)
-if __name__ == "__main__":
-
-    # 获取OA Token (现在是动态获取的)
-    logging.info(f"OA Token: {config_manager.oa_token}")
-    logging.info(f"BH Version: {config_manager.bh_ver}")
-
-    # 检查程序更新 (使用默认源优先级: gitee -> github -> cdn)
-    logging.info("--- 使用默认源检查更新 ---")
-    update_info = config_manager.check_program_update()
-    logging.info(f"Update Info: {update_info}")
-
-    # 检查程序更新 (强制只使用 GitHub)
-    logging.info("--- 强制使用 GitHub 检查更新 ---")
-    update_info_github = config_manager.check_program_update(source="github")
-    logging.info(f"Update Info (GitHub): {update_info_github}")
-
-    # 刷新 OA 信息 (强制只使用 Gitee)
-    logging.info("--- 强制使用 Gitee 刷新 OA 信息 ---")
-    config_manager.refresh_oa_info(source="gitee")
-    logging.info(f"刷新后 OA Token: {config_manager.oa_token}")
-    logging.info(f"刷新后 BH Version: {config_manager.bh_ver}")

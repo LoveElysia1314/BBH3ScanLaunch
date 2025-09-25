@@ -202,9 +202,6 @@ class NetworkManager:
                     self.source_manager.load_version_info(self.version_info)
                     if should_update_files:
                         self.save_to_local(result["text"], "updates/version.json")
-                        logging.info(
-                            f"成功从 {source_info['name']} 获取远程版本信息 ({source_info['type']})"
-                        )
                     break
 
             # 获取CHANGELOG.md（仅在should_update_files为True时才更新）
@@ -216,7 +213,6 @@ class NetworkManager:
                         result = self.fetch_from_source(url, timeout=10)
                         if result and result["success"]:
                             self.save_to_local(result["text"], "updates/CHANGELOG.md")
-                            logging.info(f"成功从 {source_name} 获取changelog")
                             break
 
             return True

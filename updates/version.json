@@ -1,7 +1,7 @@
 {
     "app_info": {
-        "version": "0.9.0",
-        "release_date": "2025-09-17",
+        "version": "0.9.1",
+        "release_date": "2025-09-25",
         "changelog_path": "updates/CHANGELOG.md",
         "size": "95MB"
     },
@@ -11,8 +11,8 @@
             "github": "https://raw.githubusercontent.com/LoveElysia1314/BBH3ScanLaunch/main/updates/version.json"
         },
         "download_url": {
-            "gitee": "https://gitee.com/LoveElysia1314/BBH3ScanLaunch/releases/download/v0.9.0/BBH3ScanLaunch_Setup_v0.9.0.zip",
-            "github": "https://github.com/LoveElysia1314/BBH3ScanLaunch/releases/download/v0.9.0/BBH3ScanLaunch_Setup_v0.9.0.zip"
+            "gitee": "https://gitee.com/LoveElysia1314/BBH3ScanLaunch/releases/download/v0.9.1/BBH3ScanLaunch_Setup_v0.9.1.zip",
+            "github": "https://github.com/LoveElysia1314/BBH3ScanLaunch/releases/download/v0.9.1/BBH3ScanLaunch_Setup_v0.9.1.zip"
         },
         "changelog": {
             "gitee": "https://gitee.com/LoveElysia1314/BBH3ScanLaunch/raw/main/updates/CHANGELOG.md",

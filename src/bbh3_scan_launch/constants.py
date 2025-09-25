@@ -6,7 +6,7 @@
 import os
 
 # 版本相关常量
-CURRENT_VERSION = "0.9.0"  # 当前版本号
+CURRENT_VERSION = "0.9.1"  # 当前版本号
 DEFAULT_VERSION = "0.0.0"  # 默认版本号
 DEFAULT_OATOKEN = "e257aaa274fb2239094cbe64d9f5ee3e"  # 默认OA Token (v8.4版本)
 
