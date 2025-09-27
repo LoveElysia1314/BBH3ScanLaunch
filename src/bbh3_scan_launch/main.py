@@ -39,12 +39,9 @@ window = None
 app = None
 game_manager = BH3GameManager()
 
-# 获取默认版本信息（使用最新的支持版本）
-oa_versions = version_manager.get_version_info("oa_versions")
-BH_VER = (
-    max(oa_versions.keys()) if oa_versions else version_manager.DEFAULT_BHVER
-)  # 当前崩坏三版本
-OA_TOKEN = version_manager.get_oa_token_for_version(BH_VER)  # 当前oa_token
+# 注意：不要在模块导入时固定 BH_VER/OA_TOKEN，
+# 这些值可能随远程 version.json 更新而变化。
+# 在运行时（登录流程）动态计算并刷新，以避免使用过期的本地值。
 
 
 # ========== 更新下载线程 ==========
@@ -196,11 +193,14 @@ class LoginThread(QThread):
             self.login_complete.emit(False)
             return
         logging.info("登录成功，账号：LoveElysia1314，开始获取OA服务器信息...")
-        # 获取服务器版本号
-        server_bh_ver = await mihoyosdk.getBHVer(BH_VER)
+        # 在调用 getBHVer 前动态计算本地默认 BH 版本，确保使用最新的 version.json
+        oa_versions = version_manager.get_version_info("oa_versions")
+        local_bh_ver = max(oa_versions.keys()) if oa_versions else version_manager.DEFAULT_BHVER
+        # 获取服务器版本号（传入本地默认版本作为缓存/参考）
+        server_bh_ver = await mihoyosdk.getBHVer(local_bh_ver)
         # 检查版本是否匹配
-        if server_bh_ver != BH_VER:
-            logging.warning(f"版本不匹配 (本地: {BH_VER}, 服务器: {server_bh_ver})！")
+        if server_bh_ver != local_bh_ver:
+            logging.warning(f"版本不匹配 (本地: {local_bh_ver}, 服务器: {server_bh_ver})！")
 
         # 刷新 OA 版本信息，如果为空则更新远程文件
         version_manager.refresh_oa_info()
