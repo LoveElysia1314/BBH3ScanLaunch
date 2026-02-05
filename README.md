@@ -1,4 +1,4 @@
-# BBH3ScanLaunch v1.3.4.2
+# BBH3ScanLaunch
 
 一个用于B服崩坏三扫码和一键登录的工具，旨在简化登录流程并提供自动化功能。项目源码源自 [scannerHelper-memories](https://github.com/HonkaiScanner/scannerHelper-memories)，特别鸣谢 [Hao_cen@bilibili](https://space.bilibili.com/269140934?spm_id_from=333.1387)。
 
