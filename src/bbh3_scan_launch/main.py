@@ -195,12 +195,16 @@ class LoginThread(QThread):
         logging.info("登录成功，账号：LoveElysia1314，开始获取OA服务器信息...")
         # 在调用 getBHVer 前动态计算本地默认 BH 版本，确保使用最新的 version.json
         oa_versions = version_manager.get_version_info("oa_versions")
-        local_bh_ver = max(oa_versions.keys()) if oa_versions else version_manager.DEFAULT_BHVER
+        local_bh_ver = (
+            max(oa_versions.keys()) if oa_versions else version_manager.DEFAULT_BHVER
+        )
         # 获取服务器版本号（传入本地默认版本作为缓存/参考）
         server_bh_ver = await mihoyosdk.getBHVer(local_bh_ver)
         # 检查版本是否匹配
         if server_bh_ver != local_bh_ver:
-            logging.warning(f"版本不匹配 (本地: {local_bh_ver}, 服务器: {server_bh_ver})！")
+            logging.warning(
+                f"版本不匹配 (本地: {local_bh_ver}, 服务器: {server_bh_ver})！"
+            )
 
         # 刷新 OA 版本信息，如果为空则更新远程文件
         version_manager.refresh_oa_info()

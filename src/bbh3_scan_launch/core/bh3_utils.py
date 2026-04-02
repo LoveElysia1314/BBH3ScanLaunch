@@ -251,8 +251,23 @@ def active_game_window():
         win32gui.ShowWindow(hwnd, win32con.SW_RESTORE)
         time.sleep(0.5)
 
-    win32gui.SetForegroundWindow(hwnd)
-    return True
+    result = win32gui.SetForegroundWindow(hwnd)
+    if not result:
+        # 如果SetForegroundWindow失败，尝试其他方法
+        win32gui.ShowWindow(hwnd, win32con.SW_SHOW)
+        win32gui.SetWindowPos(
+            hwnd,
+            win32con.HWND_TOP,
+            0,
+            0,
+            0,
+            0,
+            win32con.SWP_NOMOVE | win32con.SWP_NOSIZE,
+        )
+        time.sleep(0.1)
+        result = win32gui.SetForegroundWindow(hwnd)
+
+    return result != 0
 
 
 def click_center_of_game_window():
