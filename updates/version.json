@@ -1,27 +1,27 @@
 {
-    "app_info": {
-        "version": "0.9.2",
-        "release_date": "2025-12-04",
-        "changelog_path": "updates/CHANGELOG.md",
-        "size": "80MB"
+  "app_info": {
+    "version": "0.9.2",
+    "release_date": "2025-12-04",
+    "changelog_path": "updates/CHANGELOG.md",
+    "size": "80MB"
+  },
+  "sources": {
+    "version_url": {
+      "gitee": "https://gitee.com/LoveElysia1314/BBH3ScanLaunch/raw/main/updates/version.json",
+      "github": "https://raw.githubusercontent.com/LoveElysia1314/BBH3ScanLaunch/main/updates/version.json"
     },
-    "sources": {
-        "version_url": {
-            "gitee": "https://gitee.com/LoveElysia1314/BBH3ScanLaunch/raw/main/updates/version.json",
-            "github": "https://raw.githubusercontent.com/LoveElysia1314/BBH3ScanLaunch/main/updates/version.json"
-        },
-        "download_url": {
-            "gitee": "https://gitee.com/LoveElysia1314/BBH3ScanLaunch/releases/download/v0.9.2/BBH3ScanLaunch_Setup_v0.9.2.zip",
-            "github": "https://github.com/LoveElysia1314/BBH3ScanLaunch/releases/download/v0.9.2/BBH3ScanLaunch_Setup_v0.9.2.zip"
-        },
-        "changelog": {
-            "gitee": "https://gitee.com/LoveElysia1314/BBH3ScanLaunch/raw/main/updates/CHANGELOG.md",
-            "github": "https://raw.githubusercontent.com/LoveElysia1314/BBH3ScanLaunch/main/updates/CHANGELOG.md"
-        }
+    "download_url": {
+      "gitee": "https://gitee.com/LoveElysia1314/BBH3ScanLaunch/releases/download/v0.9.2/BBH3ScanLaunch_Setup_v0.9.2.zip",
+      "github": "https://github.com/LoveElysia1314/BBH3ScanLaunch/releases/download/v0.9.2/BBH3ScanLaunch_Setup_v0.9.2.zip"
     },
-    "oa_versions": {
-        "8.8.0": {
-            "dispatch": "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"
-        }
+    "changelog": {
+      "gitee": "https://gitee.com/LoveElysia1314/BBH3ScanLaunch/raw/main/updates/CHANGELOG.md",
+      "github": "https://raw.githubusercontent.com/LoveElysia1314/BBH3ScanLaunch/main/updates/CHANGELOG.md"
     }
+  },
+  "oa_versions": {
+    "8.9.0": {
+      "dispatch": "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"
+    }
+  }
 }
