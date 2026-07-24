@@ -15,6 +15,13 @@ from ..constants import (
 from .exception_utils import handle_exceptions
 
 
+def parse_version(version_value) -> tuple[int, int, int]:
+    """将宽松版本字符串转换为可比较的三段整数元组。"""
+    parts = re.findall(r"\d+", str(version_value or "0"))
+    parts.extend("0" for _ in range(3 - len(parts)))
+    return tuple(int(part) for part in parts[:3])
+
+
 class VersionInfo(TypedDict):
     """版本信息数据结构"""
 
@@ -104,15 +111,7 @@ class VersionManager:
         current = self.get_version_info("current")
         remote = self.get_version_info("remote")
 
-        # 将版本字符串转换为数字元组进行比较
-        def to_version_tuple(version_str):
-            parts = version_str.split(".")
-            # 处理版本号位数不一致的情况（如1.2 -> 1.2.0）
-            while len(parts) < 3:
-                parts.append("0")
-            return tuple(map(int, parts))
-
-        return to_version_tuple(remote) > to_version_tuple(current)
+        return parse_version(remote) > parse_version(current)
 
     @handle_exceptions("读取更新日志失败", "[ERROR] 读取更新日志失败")
     def read_changelog(self) -> str:
@@ -129,7 +128,3 @@ class VersionManager:
             self._version_info_cache["oa_versions"] = new_oa_versions
             return True
         return False
-
-
-# 全局实例
-version_manager = VersionManager()

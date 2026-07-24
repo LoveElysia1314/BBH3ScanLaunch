@@ -1,22 +1,19 @@
 # -*- coding: utf-8 -*-
 import os
 import re
-import time
 import numpy as np
 import logging
 import psutil
 import ctypes
 from cv2 import matchTemplate, TM_CCOEFF_NORMED, minMaxLoc
-from ctypes import windll
 from PIL import Image, ImageGrab
-import pyautogui
 from pyzbar.pyzbar import decode
-import win32con
-import win32gui
-import win32ui
+from urllib.parse import parse_qs, urlparse
 from .sdk import mihoyosdk
-from ..constants import GAME_WINDOW_TITLE, TEMPLATE_PICTURES_DIR
+from .game_window import GameWindowService
+from ..constants import TEMPLATE_PICTURES_DIR
 from ..utils.exception_utils import handle_exceptions
+from ..utils.notification_service import NotificationSink, create_noop_sink
 
 # 常量定义（已移至constants.py）
 TEMPLATE_DIR = TEMPLATE_PICTURES_DIR  # 向后兼容
@@ -64,16 +61,25 @@ class BH3GameManager:
     统一管理游戏进程、启动、窗口检测等功能
     """
 
-    def __init__(self):
+    def __init__(self, config_manager, game_window=None, notifier=None):
         self.game_path = None
+        self._config_manager = config_manager
+        self._game_window = game_window or GameWindowService(
+            lambda: self._config_manager.get_config("game_path", "")
+        )
+        self._notifier = notifier or create_noop_sink()
         self._load_game_path()
 
     def _load_game_path(self):
         """加载游戏路径配置"""
-        from ..utils.config_utils import config_manager
-
-        config = config_manager.config
+        config = self._config_manager.config
         self.game_path = config.get("game_path")
+
+    def set_notifier(self, notifier: NotificationSink):
+        """
+        注入通知器，默认行为为日志+静默兜底。
+        """
+        self._notifier = notifier or create_noop_sink()
 
     def is_bh3_running(self):
         """
@@ -91,39 +97,38 @@ class BH3GameManager:
         """
         启动 BH3.exe
         """
-        if not self.game_path:
-            logging.info("请先配置游戏路径！")
-            return False
-        if not self.is_bh3_running():
-            os.startfile(self.game_path)
-            logging.info("崩坏3已启动")
-            return True
-        logging.info("崩坏3已在运行，无需重复启动")
-        return False
+        return start_bh3(self.game_path)
+
+    def _show_message(self, show_messages, title, text, is_warning=False):
+        """
+        统一展示信息，默认走注入的 notifier。
+        """
+        if not show_messages:
+            return
+        if is_warning:
+            self._notifier.warning(title, text)
+        else:
+            self._notifier.info(title, text)
 
     def is_game_window_exist(self):
         """检查崩坏3游戏窗口是否存在"""
-        return is_game_window_exist()
+        return self._game_window.exists()
 
     def launch_game(self, show_messages=True):
         """
         启动游戏
         """
+        # 配置可能在运行时被用户改动，启动前重新读取一次
+        self._load_game_path()
         if not self.game_path:
-            logging.info("请先配置游戏路径！")
-            if show_messages:
-                from PySide6.QtWidgets import QMessageBox
-
-                QMessageBox.warning(None, "路径未配置", "请先配置游戏路径！")
+            msg = "请先配置游戏路径！"
+            logging.info(msg)
+            self._show_message(show_messages, "路径未配置", msg, is_warning=True)
             return False
 
         # 检查进程，防止重复启动
         if self.is_bh3_running():
             logging.info("崩坏3已在运行，无需重复启动")
-            if show_messages:
-                from PySide6.QtWidgets import QMessageBox
-
-                QMessageBox.information(None, "已在运行", "崩坏3已在运行，无需重复启动")
             return False
         logging.info("正在启动崩坏3...")
         try:
@@ -132,10 +137,9 @@ class BH3GameManager:
             return True
         except Exception as e:
             logging.error(f"启动游戏失败: {e}")
-            if show_messages:
-                from PySide6.QtWidgets import QMessageBox
-
-                QMessageBox.warning(None, "启动失败", f"无法启动游戏: {e}")
+            self._show_message(
+                show_messages, "启动失败", f"无法启动游戏: {e}", is_warning=True
+            )
             return False
 
     def one_click_login(self, skip_launch=False, show_messages=True):
@@ -146,7 +150,8 @@ class BH3GameManager:
         """
         # 如果不跳过启动，则调用统一的启动方法
         if not skip_launch:
-            if not self.launch_game(show_messages=show_messages):
+            launch_result = self.launch_game(show_messages=show_messages)
+            if not launch_result and not self.is_bh3_running():
                 return False
 
         # 这里可以添加一键登录的逻辑，但由于依赖UI，可能需要外部处理
@@ -157,19 +162,18 @@ class BH3GameManager:
         self,
         config,
         image_processor,
-        click_center_of_game_window_func,
         exit_app_func=None,
     ):
         """
         自动监控和处理游戏窗口
         :param config: 配置字典
         :param image_processor: ImageProcessor 实例
-        :param click_center_of_game_window_func: 点击窗口中心的函数
         :param exit_app_func: 退出应用的函数（可选）
         """
         import asyncio
         import ctypes
-        from ..utils.config_utils import config_manager
+
+        bh_info = self._config_manager.bh_info
 
         while True:
             try:
@@ -183,18 +187,16 @@ class BH3GameManager:
                 if config.get("auto_clip"):
                     screenshot = image_processor.capture_screen()
                     if screenshot:
-                        from ..utils.config_utils import config_manager
-
                         qr_parsed = await image_processor.parse_qr_code(
                             image_source="game_window",
                             config=config,
-                            bh_info=config_manager.bh_info,
+                            bh_info=bh_info,
                         )
                         if qr_parsed:
                             if config.get("auto_click"):
                                 logging.info("扫码成功，4秒后将自动点击窗口中心")
                                 await asyncio.sleep(4)
-                                click_center_of_game_window_func()
+                                self._game_window.click_center()
                             if config.get("auto_close") and exit_app_func:
                                 logging.info("已启用自动退出，2秒后将关闭扫码器")
                                 await asyncio.sleep(2)
@@ -203,12 +205,10 @@ class BH3GameManager:
 
                 # 处理剪贴板检查：无论是否开启自动截图，只要已登录就尝试从剪贴板识别二维码
                 if config.get("account_login", False):
-                    from ..utils.config_utils import config_manager
-
                     await image_processor.parse_qr_code(
                         image_source="clipboard",
                         config=config,
-                        bh_info=config_manager.bh_info,
+                        bh_info=bh_info,
                     )
 
                 # 根据配置的间隔时间等待
@@ -223,189 +223,20 @@ class BH3GameManager:
         return ctypes.windll.shell32.IsUserAnAdmin()
 
 
-@handle_exceptions("检查窗口存在状态出错", False)
-def is_game_window_exist():
-    """检查崩坏3游戏窗口是否存在"""
-
-    def enum_windows(hwnd, results):
-        if (
-            win32gui.IsWindowVisible(hwnd)
-            and win32gui.GetWindowText(hwnd) == GAME_WINDOW_TITLE
-        ):
-            results.append(True)
-
-    results = []
-    win32gui.EnumWindows(enum_windows, results)
-    exist = bool(results)
-    return exist
-
-
-@handle_exceptions("激活窗口出错", False)
-def active_game_window():
-    """激活崩坏3游戏窗口并置于前台"""
-    hwnd = win32gui.FindWindow(None, GAME_WINDOW_TITLE)
-    if not hwnd:
-        return False
-
-    if win32gui.IsIconic(hwnd):
-        win32gui.ShowWindow(hwnd, win32con.SW_RESTORE)
-        time.sleep(0.5)
-
-    result = win32gui.SetForegroundWindow(hwnd)
-    if not result:
-        # 如果SetForegroundWindow失败，尝试其他方法
-        win32gui.ShowWindow(hwnd, win32con.SW_SHOW)
-        win32gui.SetWindowPos(
-            hwnd,
-            win32con.HWND_TOP,
-            0,
-            0,
-            0,
-            0,
-            win32con.SWP_NOMOVE | win32con.SWP_NOSIZE,
-        )
-        time.sleep(0.1)
-        result = win32gui.SetForegroundWindow(hwnd)
-
-    return result != 0
-
-
-def click_center_of_game_window():
-    """点击崩坏3游戏窗口中心位置"""
-    hwnd = win32gui.FindWindow(None, GAME_WINDOW_TITLE)
-    if not hwnd or not is_game_window_exist():
-        logging.info("未找到游戏窗口")
-        return
-
-    left, top, right, bottom = win32gui.GetWindowRect(hwnd)
-    width = right - left
-    height = bottom - top
-    center_x = left + width // 2
-    center_y = top + height // 2
-
-    pyautogui.click(center_x, center_y)
-
-
-class WindowCapture:
-    """
-    后台窗口截图工具类
-    使用Windows API实现后台窗口截图功能，支持对崩坏3游戏窗口的截图
-    """
-
-    def __init__(self, window_title):
-        self.window_title = window_title
-        self.hwnd = None
-
-    def _find_window(self):
-        """查找崩坏3游戏窗口句柄"""
-        self.hwnd = win32gui.FindWindow(None, self.window_title)
-        if self.hwnd:
-            return True
-        logging.debug(f"未找到窗口: {self.window_title}")
-        return False
-
-    @handle_exceptions("窗口捕获出错", None)
-    def capture_window(self):
-        """截取整个游戏窗口画面（支持后台窗口）"""
-        # 若无句柄或句柄已无效，尝试重新查找
-        try:
-            hwnd_valid = bool(self.hwnd) and win32gui.IsWindow(self.hwnd)
-        except Exception:
-            hwnd_valid = False
-
-        if not hwnd_valid and not self._find_window():
-            logging.debug("无法获取窗口句柄，截图失败")
-            return None
-
-        left, top, right, bot = win32gui.GetWindowRect(self.hwnd)
-        # 二次校验：获取窗口矩形失败时，尝试刷新句柄
-        try:
-            left, top, right, bot = win32gui.GetWindowRect(self.hwnd)
-        except Exception:
-            if not self._find_window():
-                logging.debug("窗口句柄无效且刷新失败，截图终止")
-                return None
-            left, top, right, bot = win32gui.GetWindowRect(self.hwnd)
-        width, height = right - left, bot - top
-
-        hwndDC = None
-        mfcDC = None
-        saveDC = None
-        saveBitMap = None
-        try:
-            hwndDC = win32gui.GetWindowDC(self.hwnd)
-            mfcDC = win32ui.CreateDCFromHandle(hwndDC)
-            saveDC = mfcDC.CreateCompatibleDC()
-            saveBitMap = win32ui.CreateBitmap()
-            saveBitMap.CreateCompatibleBitmap(mfcDC, width, height)
-            saveDC.SelectObject(saveBitMap)
-
-            windll.user32.PrintWindow(self.hwnd, saveDC.GetSafeHdc(), 0)
-            # PrintWindow 可能在句柄刚失效时返回黑屏；重试一次
-            try:
-                windll.user32.PrintWindow(self.hwnd, saveDC.GetSafeHdc(), 0)
-            except Exception as e:
-                logging.debug(f"PrintWindow 调用失败，尝试刷新句柄后重试: {e}")
-                if self._find_window():
-                    windll.user32.PrintWindow(self.hwnd, saveDC.GetSafeHdc(), 0)
-
-            bmpinfo = saveBitMap.GetInfo()
-            bmpstr = saveBitMap.GetBitmapBits(True)
-            pil_img = Image.frombuffer(
-                "RGB",
-                (bmpinfo["bmWidth"], bmpinfo["bmHeight"]),
-                bmpstr,
-                "raw",
-                "BGRX",
-                0,
-                1,
-            )
-            return pil_img
-        except Exception as e:
-            logging.error(f"截图过程中出错: {e}")
-            return None
-        finally:
-            # 确保资源被正确释放
-            try:
-                if saveBitMap:
-                    win32gui.DeleteObject(saveBitMap.GetHandle())
-            except Exception:
-                pass
-            try:
-                if saveDC:
-                    saveDC.DeleteDC()
-            except Exception:
-                pass
-            try:
-                if mfcDC:
-                    mfcDC.DeleteDC()
-            except Exception:
-                pass
-            try:
-                if hwndDC:
-                    win32gui.ReleaseDC(self.hwnd, hwndDC)
-            except Exception:
-                pass
-
-
 class ImageProcessor:
     """
     图像处理引擎
     提供模板匹配、屏幕捕获和二维码识别功能，用于崩坏3游戏界面识别
     """
 
-    def __init__(self, template_dir=TEMPLATE_DIR):
+    def __init__(self, template_dir=TEMPLATE_DIR, game_window=None):
         logging.info("初始化图像处理器")
         self.template_dir = template_dir
-        self.screen_width, self.screen_height = self._get_screen_resolution()
-        logging.info(f"屏幕分辨率: {self.screen_width}x{self.screen_height}")
-        self.template_cache = {}  # 内存缓存模板
-        self.window_capturer = None  # 延迟初始化窗口捕获器
+        self.game_window = game_window or GameWindowService()
+        self.template_cache = {}
+        self.template_resolutions = {}
+        self._scaled_template_cache = {}
         self._load_templates()
-
-    def _get_screen_resolution(self):
-        """获取主屏幕分辨率"""
-        return windll.user32.GetSystemMetrics(0), windll.user32.GetSystemMetrics(1)
 
     def _get_resolution_from_filename(self, filename):
         """从模板文件名中提取分辨率信息"""
@@ -413,7 +244,7 @@ class ImageProcessor:
         return int(match.group(1)) if match else None
 
     def _load_templates(self):
-        """加载模板图片并缩放到当前屏幕分辨率"""
+        """加载原始模板；匹配时再按游戏客户区高度缩放。"""
         if not os.path.exists(self.template_dir):
             os.makedirs(self.template_dir, exist_ok=True)
             logging.info(f"已创建模板目录: {self.template_dir}")
@@ -433,17 +264,9 @@ class ImageProcessor:
 
             # logging.debug(f"加载模板: {filename} (源分辨率: {src_resolution}p)")
             try:
-                # 使用PIL代替cv2加载和缩放模板
-                template_img = Image.open(file_path).convert("L")
-                scale_factor = self.screen_height / src_resolution
-                new_width = int(template_img.width * scale_factor)
-                new_height = int(template_img.height * scale_factor)
-                scaled_template = template_img.resize(
-                    (new_width, new_height), Image.LANCZOS
-                )
-
-                # 缓存PIL图像对象
-                self.template_cache[filename] = scaled_template
+                with Image.open(file_path) as template_img:
+                    self.template_cache[filename] = template_img.convert("L")
+                self.template_resolutions[filename] = src_resolution
             except Exception as e:
                 logging.warning(f"加载或缩放模板出错: {filename}, {e}")
                 continue
@@ -452,21 +275,27 @@ class ImageProcessor:
 
         logging.info(f"模板加载完成，共加载 {loaded_count} 个模板")
 
-    def _init_window_capturer(self):
-        """初始化崩坏3游戏窗口捕获器（延迟加载）"""
-        if self.window_capturer is None:
-            logging.info("初始化窗口捕获器")
-            self.window_capturer = WindowCapture(GAME_WINDOW_TITLE)
-        return self.window_capturer
+    def _get_scaled_template(self, template_name, target_height):
+        cache_key = (template_name, target_height)
+        if cache_key in self._scaled_template_cache:
+            return self._scaled_template_cache[cache_key]
+
+        source = self.template_cache[template_name]
+        source_height = self.template_resolutions[template_name]
+        scale_factor = target_height / source_height
+        new_size = (
+            max(1, round(source.width * scale_factor)),
+            max(1, round(source.height * scale_factor)),
+        )
+        scaled = source.resize(new_size, Image.Resampling.LANCZOS)
+        self._scaled_template_cache[cache_key] = scaled
+        return scaled
 
     def capture_screen(self):
-        """捕获整个崩坏3游戏窗口的灰度图像（窗口检测优化）"""
-        if not is_game_window_exist():
-            return None
-        capturer = self._init_window_capturer()
-        pil_img = capturer.capture_window()
+        """捕获已验证的游戏客户区灰度图像。"""
+        pil_img = self.game_window.capture()
         if pil_img is None:
-            logging.warning("屏幕捕获失败")
+            logging.debug("游戏窗口捕获失败")
             return None
         return pil_img.convert("L")
 
@@ -477,7 +306,6 @@ class ImageProcessor:
             logging.warning(f"模板不存在: {template_name}")
             return None, 0
 
-        template = self.template_cache[template_name]
         if screen_gray is None:
             return None, 0
 
@@ -487,9 +315,13 @@ class ImageProcessor:
             if not isinstance(screen_gray, np.ndarray)
             else screen_gray
         )
+        screen_height, screen_width = screen_np.shape[:2]
+        template = self._get_scaled_template(template_name, screen_height)
         template_np = (
             np.array(template) if not isinstance(template, np.ndarray) else template
         )
+        if template_np.shape[0] > screen_height or template_np.shape[1] > screen_width:
+            return None, 0
 
         result = matchTemplate(screen_np, template_np, TM_CCOEFF_NORMED)
         _, max_val, _, max_loc = minMaxLoc(result)
@@ -509,6 +341,9 @@ class ImageProcessor:
         best_match = None
         best_confidence = 0
         screen_gray = self.capture_screen()
+        if screen_gray is None:
+            logging.debug("未能获取游戏窗口截图，终止匹配点击")
+            return False
 
         for template_name in self.template_cache:
             location, confidence = self.match_template(
@@ -520,19 +355,15 @@ class ImageProcessor:
 
         if best_match:
             template_name, (x, y), confidence = best_match
-            x = max(0, min(x, self.screen_width - 1))
-            y = max(0, min(y, self.screen_height - 1))
 
             logging.info(
                 f"匹配到位置: {template_name} @ ({x}, {y}), 置信度: {confidence:.2f}"
             )
-            if active_game_window():
-                pyautogui.click(x, y)
+            if self.game_window.click_client(x, y):
                 logging.info("点击对应模板")
                 return True
-            else:
-                logging.info("游戏窗口未激活，取消点击")
-                return False
+            logging.info("游戏窗口未激活，取消点击")
+            return False
         return False
 
     @handle_exceptions("二维码解析出错", False)
@@ -543,8 +374,7 @@ class ImageProcessor:
             if not isinstance(im, Image.Image):
                 return False
         elif image_source == "game_window":
-            capturer = self._init_window_capturer()
-            im = capturer.capture_window()
+            im = self.game_window.capture()
             if im is None:
                 logging.warning("游戏窗口截图失败")
                 return False
@@ -563,14 +393,7 @@ class ImageProcessor:
             logging.debug("无效的二维码格式")
             return False
 
-        ticket = next(
-            (
-                p.split("=")[1]
-                for p in url.split("?")[1].split("&")
-                if p.startswith("ticket=")
-            ),
-            None,
-        )
+        ticket = parse_qs(urlparse(url).query).get("ticket", [None])[0]
 
         if ticket and config and bh_info:
             logging.info("检测到有效登陆票据，开始扫码验证")
@@ -585,10 +408,6 @@ class ImageProcessor:
     @handle_exceptions("清空剪贴板出错")
     def clear_clipboard(self):
         """清空系统剪贴板内容"""
-        if windll.user32.OpenClipboard(None):
-            windll.user32.EmptyClipboard()
-            windll.user32.CloseClipboard()
-
-
-# 初始化全局实例
-image_processor = ImageProcessor()
+        if ctypes.windll.user32.OpenClipboard(None):
+            ctypes.windll.user32.EmptyClipboard()
+            ctypes.windll.user32.CloseClipboard()

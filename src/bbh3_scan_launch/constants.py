@@ -5,9 +5,10 @@
 """
 
 import os
+from pathlib import Path
 
 # 版本相关常量
-CURRENT_VERSION = "0.9.2"  # 当前版本号
+CURRENT_VERSION = "1.0.0"  # 当前版本号
 DEFAULT_VERSION = "0.0.0"  # 默认版本号
 DEFAULT_OATOKEN = "e257aaa274fb2239094cbe64d9f5ee3e"  # 默认OA Token (v8.4版本)
 
@@ -27,8 +28,26 @@ VERSION_FILE = "version.json"
 CHANGELOG_FILE = "CHANGELOG.md"
 
 # 路径相关常量
-# 配置目录路径
-CONFIG_DIR_PATH = os.path.join(os.path.dirname(__file__), "..", "..", CONFIG_DIR)
+# 应用目录路径
+APPLICATION_ROOT_PATH = os.path.abspath(
+    os.path.join(os.path.dirname(__file__), "..", "..")
+)
+
+
+def get_user_data_dir() -> str:
+    """返回不会随安装目录升级而删除的用户数据目录。"""
+    override = os.environ.get("BBH3SCANLAUNCH_DATA_DIR")
+    if override:
+        return os.path.abspath(os.path.expandvars(override))
+    local_app_data = os.environ.get("LOCALAPPDATA")
+    if local_app_data:
+        return os.path.join(local_app_data, "BBH3ScanLaunch")
+    return str(Path.home() / "AppData" / "Local" / "BBH3ScanLaunch")
+
+
+# 用户配置保存到 LocalAppData；旧版本曾写入安装目录下的 config。
+CONFIG_DIR_PATH = get_user_data_dir()
+LEGACY_CONFIG_FILE_PATH = os.path.join(APPLICATION_ROOT_PATH, CONFIG_DIR, CONFIG_FILE)
 
 # 更新目录路径
 UPDATES_DIR_PATH = os.path.join(os.path.dirname(__file__), "..", "..", UPDATES_DIR)

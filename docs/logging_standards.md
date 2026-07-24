@@ -37,7 +37,7 @@
 
 ## 日志归属权划分
 
-### 应用层 (main.py)
+### 应用层（bootstrap、coordinator、窗口）
 **职责**: 
 - 负责 Info 级别的用户可见流程节点提示（每个阶段一次）
 - 对返回错误统一输出 Error，描述"做了什么 + 为什么失败"
@@ -66,9 +66,9 @@
 
 ## 按模块的具体标准
 
-### main.py
+### 应用协调层
 - **保留 Info**: 每阶段流程节点（开始登录B站、登录成功、开始登录崩坏3、开始获取OA信息、获取OA成功、更新状态）
-- **避免重复**: 不在调用 `check_program_update` 后重复输出来源细节
+- **避免重复**: 不在调用 `UpdateService.check_update` 后重复输出来源细节
 - **错误处理**: 对错误统一 Error（从返回值的 error 字段判断），不重复描述底层细节
 
 ### utils/network_utils.py
@@ -76,9 +76,9 @@
 - **Warning**: "本地配置中无 version_url 源，使用硬编码回退逻辑"等回退情况
 - **Error**: 请求失败、解析失败、写入失败，错误信息包含目标 URL/文件路径与异常摘要
 
-### utils/config_utils.py
-- **check_program_update**: 成功路径默认不输出，根据返回值由调用者决定是否输出 Info
-- **Error**: 内部错误（无法获取远程版本/更新失败）输出 Error 并通过返回值携带 error 字段
+### core/services/update_service.py
+- **check_update**: 成功路径默认不输出，根据返回值由调用者决定是否输出 Info
+- **Error**: 内部错误（无法获取远程版本/更新失败）通过返回值携带 error 字段
 
 ### core/sdk/mihoyosdk.py
 - **getBHVer**: 正常获取成功不输出；使用缓存/回退时 Warning；获取失败 Error

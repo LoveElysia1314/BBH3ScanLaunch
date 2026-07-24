@@ -4,8 +4,7 @@ import os
 import webbrowser
 import json
 import logging
-import time
-from typing import List, Dict
+from typing import Callable, Dict, List
 from ..constants import VERSION_FILE_PATH
 from .exception_utils import handle_exceptions
 
@@ -13,8 +12,9 @@ from .exception_utils import handle_exceptions
 class SourceManager:
     """管理源配置，完全基于version.json"""
 
-    def __init__(self):
+    def __init__(self, priority_provider: Callable[[], list[str]] | None = None):
         self.version_info = None
+        self._priority_provider = priority_provider
 
     def load_version_info(self, version_info):
         """加载版本信息，用于获取sources配置"""
@@ -31,10 +31,11 @@ class SourceManager:
     @handle_exceptions("获取下载优先级失败", ["gitee", "github"])
     def get_priority_order(self) -> List[str]:
         """获取源优先级顺序（从config.json读取）"""
-        from ..dependency_container import get_config_manager
-
-        config_manager = get_config_manager()
-        priority = config_manager.get_config("download_priority", ["gitee", "github"])
+        priority = (
+            self._priority_provider()
+            if self._priority_provider is not None
+            else ["gitee", "github"]
+        )
         return priority if isinstance(priority, list) else ["gitee", "github"]
 
     def normalize_source_input(self, source_input):
@@ -50,11 +51,42 @@ class SourceManager:
 
 
 class NetworkManager:
-    def __init__(self):
-        self.source_manager = SourceManager()
+    def __init__(self, priority_provider: Callable[[], list[str]] | None = None):
+        self.source_manager = SourceManager(priority_provider)
         self.version_info = None
+        self._fallback_version_urls = {
+            "gitee": "https://gitee.com/LoveElysia1314/BBH3ScanLaunch/raw/main/updates/version.json",
+            "github": "https://raw.githubusercontent.com/LoveElysia1314/BBH3ScanLaunch/main/updates/version.json",
+        }
         # 启动时先加载本地版本信息作为配置基础
         self._load_local_version_info()
+
+    def _build_version_url_list(self, source=None):
+        """构建按优先级排序的 version.json 获取地址列表"""
+        source_priority = self.source_manager.normalize_source_input(source)
+        version_urls = []
+        version_sources = self.source_manager.get_links_by_category("version_url")
+
+        if version_sources:
+            logging.debug("使用本地配置的version.json获取源")
+            source_candidates = version_sources
+            source_type = "configured"
+        else:
+            logging.warning("本地配置中无version_url源，使用硬编码回退逻辑")
+            source_candidates = self._fallback_version_urls
+            source_type = "hardcoded"
+
+        for source_name in source_priority:
+            if source_name in source_candidates:
+                version_urls.append(
+                    {
+                        "name": source_name,
+                        "url": source_candidates[source_name],
+                        "type": source_type,
+                    }
+                )
+
+        return version_urls
 
     @handle_exceptions("加载本地版本配置失败", None)
     def _load_local_version_info(self):
@@ -97,44 +129,7 @@ class NetworkManager:
     def get_remote_version_info(self, source=None):
         """获取远程版本信息，但不保存到本地文件"""
         try:
-            source_priority = self.source_manager.normalize_source_input(source)
-
-            # 优先尝试使用本地配置中的version_url源
-            version_urls = []
-            version_sources = self.source_manager.get_links_by_category("version_url")
-
-            if version_sources:
-                # 使用本地配置中的源
-                for source_name in source_priority:
-                    if source_name in version_sources:
-                        version_urls.append(
-                            {
-                                "name": source_name,
-                                "url": version_sources[source_name],
-                                "type": "configured",
-                            }
-                        )
-                logging.debug("使用本地配置的version.json获取源")
-            else:
-                # 回退到硬编码源（兜底逻辑）
-                logging.warning("本地配置中无version_url源，使用硬编码回退逻辑")
-                for source_name in source_priority:
-                    if source_name == "gitee":
-                        version_urls.append(
-                            {
-                                "name": "gitee",
-                                "url": "https://gitee.com/LoveElysia1314/BBH3ScanLaunch/raw/main/updates/version.json",
-                                "type": "hardcoded",
-                            }
-                        )
-                    elif source_name == "github":
-                        version_urls.append(
-                            {
-                                "name": "github",
-                                "url": "https://raw.githubusercontent.com/LoveElysia1314/BBH3ScanLaunch/main/updates/version.json",
-                                "type": "hardcoded",
-                            }
-                        )
+            version_urls = self._build_version_url_list(source=source)
 
             # 获取远程version.json（不保存）
             for source_info in version_urls:
@@ -155,43 +150,7 @@ class NetworkManager:
         """从远程获取version.json和CHANGELOG.md（仅在should_update_files为True时才更新）"""
         try:
             source_priority = self.source_manager.normalize_source_input(source)
-
-            # 优先尝试使用本地配置中的version_url源
-            version_urls = []
-            version_sources = self.source_manager.get_links_by_category("version_url")
-
-            if version_sources:
-                # 使用本地配置中的源
-                for source_name in source_priority:
-                    if source_name in version_sources:
-                        version_urls.append(
-                            {
-                                "name": source_name,
-                                "url": version_sources[source_name],
-                                "type": "configured",
-                            }
-                        )
-                logging.debug("使用本地配置的version.json获取源")
-            else:
-                # 回退到硬编码源（兜底逻辑）
-                logging.warning("本地配置中无version_url源，使用硬编码回退逻辑")
-                for source_name in source_priority:
-                    if source_name == "gitee":
-                        version_urls.append(
-                            {
-                                "name": "gitee",
-                                "url": "https://gitee.com/LoveElysia1314/BBH3ScanLaunch/raw/main/updates/version.json",
-                                "type": "hardcoded",
-                            }
-                        )
-                    elif source_name == "github":
-                        version_urls.append(
-                            {
-                                "name": "github",
-                                "url": "https://raw.githubusercontent.com/LoveElysia1314/BBH3ScanLaunch/main/updates/version.json",
-                                "type": "hardcoded",
-                            }
-                        )
+            version_urls = self._build_version_url_list(source=source)
 
             # 获取远程version.json
             for source_info in version_urls:
@@ -259,7 +218,3 @@ class NetworkManager:
 
         logging.error("所有下载源均不可用")
         return False
-
-
-# 全局实例
-network_manager = NetworkManager()

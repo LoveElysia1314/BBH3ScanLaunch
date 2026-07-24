@@ -32,11 +32,9 @@
    git clone https://github.com/LoveElysia1314/BBH3ScanLaunch.git
    cd BBH3ScanLaunch
    ```
-2. 创建虚拟环境并安装依赖：
+2. 使用系统 Python 安装依赖：
    ```bash
-   python -m venv venv
-   venv\Scripts\activate
-   pip install -r requirements.txt
+   python -m pip install -r requirements.txt
    ```
 3. 运行程序：
    ```bash
@@ -44,14 +42,20 @@
    ```
 
 ### 从源码编译
-1. 安装 `pyinstaller`：
-   ```bash
-   pip install pyinstaller
-   ```
-2. 打包为可执行文件：
+1. 使用系统 Python 启动打包脚本：
    ```bash
    python scripts/build.py
    ```
+   - 首次构建会自动创建 `.build-venv` 并安装项目及 PyInstaller 依赖。
+   - 后续构建会复用该环境；`requirements.txt` 变化时自动刷新依赖。
+   - 使用 `--refresh-deps` 可强制重新安装依赖。
+   - 使用 `--recreate-build-env` 可删除并重建专用构建环境。
+   - 源码、资源、图标、打包配置和依赖版本均未变化时，会通过输入哈希直接复用现有 PyInstaller 产物。
+   - 使用 `--rebuild` 可忽略输入哈希并强制重新执行 PyInstaller。
+   - 仅验证 PyInstaller 产物时使用 `python scripts/build.py --skip-installer`。
+   - 单个外部命令默认 30 分钟超时，可通过 `--timeout SECONDS` 调整，传入 `0` 表示不限制。
+   - PyInstaller 与 Inno Setup 日志会实时输出，并显示各阶段耗时。
+   - 实际打包由隔离环境中的 Python 执行，不会扫描系统 Python 中的 Torch、Matplotlib 等无关包。
    - 输出位置：`dist/` 目录。
    - 包含快捷方式：
      - `[仅B服] 崩坏3扫码器.lnk`：标准模式。
@@ -90,13 +94,22 @@
 BBH3ScanLaunch/
 ├── src/
 │   └── bbh3_scan_launch/
-│       ├── main.py                    # 主程序入口，GUI事件处理
+│       ├── main.py                    # 最小程序入口
 │       ├── constants.py               # 常量定义
-│       ├── dependency_container.py    # 依赖注入容器
 │       ├── gui/
-│       │   └── main_window.py         # PySide6界面实现
+│       │   ├── application_window.py  # 主窗口交互和状态渲染
+│       │   ├── main_window.py         # PySide6控件布局
+│       │   └── logging_handler.py     # GUI日志桥接
 │       ├── core/
+│       │   ├── app_bootstrap.py       # 应用组合与生命周期
 │       │   ├── bh3_utils.py           # 图像处理/窗口操作核心，包含BH3GameManager类
+│       │   ├── coordinator.py         # 登录与监控流程协调
+│       │   ├── runtime_context.py     # 显式运行时依赖
+│       │   ├── workers.py             # Qt后台任务
+│       │   ├── services/
+│       │   │   ├── auth_service.py    # 认证流程
+│       │   │   ├── captcha_server.py  # 验证码回调服务
+│       │   │   └── update_service.py  # 更新流程
 │       │   └── sdk/
 │       │       ├── mihoyosdk.py       # 米哈游登录接口封装
 │       │       └── bsgamesdk.py       # B站登录接口封装
@@ -116,8 +129,7 @@ BBH3ScanLaunch/
 │   └── templates/                    # HTML模板
 │       ├── geetest.html
 │       └── index.html
-├── config/                           # 配置文件（运行时生成）
-│   └── config.json
+├── config/                           # 旧版配置迁移来源（不纳入 Git）
 ├── scripts/                          # 构建脚本
 │   └── build.py                      # PyInstaller 打包和安装包构建脚本
 ├── updates/                          # 更新相关文件
@@ -134,12 +146,17 @@ BBH3ScanLaunch/
 
 | 模块 | 功能描述 |
 |------|----------|
-| `main.py` | 主程序入口，GUI 事件处理和 Flask 服务器管理 |
-| `main_window.py` | PySide6 图形界面实现 |
-| `bh3_utils.py` | 游戏窗口操作、图像处理、自动化点击核心逻辑，包含 BH3GameManager 类 |
+| `main.py` | 最小程序入口 |
+| `app_bootstrap.py` | 依赖组合、窗口构建、验证码服务和应用生命周期 |
+| `application_window.py` | PySide6 主窗口交互与状态渲染 |
+| `main_window.py` | PySide6 控件布局 |
+| `auth_service.py` | B站认证与崩坏3 OA 登录流程 |
+| `update_service.py` | 版本检查、元数据刷新和下载源选择 |
+| `game_window.py` | 根据进程路径/PID定位游戏窗口，统一客户区截图、激活和坐标转换 |
+| `bh3_utils.py` | 游戏进程管理、图像处理、二维码识别和自动化流程 |
 | `mihoyosdk.py` | 米哈游登录接口封装 |
 | `bsgamesdk.py` | B站游戏登录接口封装 |
-| `config_utils.py` | 配置文件读取和管理 |
+| `config_utils.py` | 用户配置持久化及旧版本配置迁移 |
 | `version_utils.py` | 版本管理和远程更新检查 |
 | `network_utils.py` | 网络请求和错误处理 |
 | `exception_utils.py` | 统一异常处理装饰器 |
@@ -181,7 +198,8 @@ A：确保屏幕分辨率受支持，或手动添加相应模板图片。
 A：该控件主要为文字内容，会受屏幕分辨率、比例及Windows缩放影响。若无法识别，请自行截取并裁剪图片，按照命名规则 `{屏幕高}p_{图片序号}` 放置在 `resources/pictures_to_match/` 目录中。点击“管理模板”按钮打开模板文件夹。
 
 **Q：登录信息缓存问题？**  
-A：更换账号密码后，程序会自动清理缓存。也可手动删除 `config/config.json` 文件重置配置。
+A：更换账号密码后，程序会自动清理缓存。配置持久保存在
+`%LOCALAPPDATA%\BBH3ScanLaunch\config.json`，安装新版本不会覆盖；删除该文件可重置配置。
 
 **Q：网络连接错误？**  
 A：检查网络连接，程序会自动重试。如遇 SSL 错误，程序会自动处理并弹出登录框。

@@ -1,153 +1,358 @@
+import argparse
+import hashlib
 import os
 import sys
 import subprocess
 import shutil
 import tempfile
+import time
 import json
 import zipfile
 from pathlib import Path
 from datetime import datetime
-import site
-
-# 禁用用户站点包
-site.ENABLE_USER_SITE = False
 
 # 添加项目路径到系统路径
 project_root = Path(__file__).parent.parent.resolve()
 sys.path.insert(0, str(project_root / "src"))
 sys.path.insert(0, str(project_root / "src" / "bbh3_scan_launch" / "utils"))
 
-from bbh3_scan_launch.dependency_container import get_version_manager
+from bbh3_scan_launch.utils.version_utils import VersionManager
 
 # 配置常量
 USE_ONEFILE = False  # True=单文件，False=多文件
 BLACKLIST_FILES = []
-version_manager = get_version_manager()
+PYINSTALLER_EXCLUDES = (
+    "PyQt5",
+    "PyQt6",
+)
+version_manager = VersionManager()
 VERSION = version_manager.get_version_info("current")
 
 
 class BuildConfig:
     """构建配置类"""
 
-    def __init__(self):
-        self.project_root = Path(__file__).parent.parent.resolve()
+    def __init__(self, command_timeout=1800, project_root=None):
+        self.project_root = (
+            Path(project_root).resolve()
+            if project_root is not None
+            else Path(__file__).parent.parent.resolve()
+        )
         self.script_dir = Path(__file__).parent.resolve()
-        self.venv_dir = self.project_root / "venv"
         self.output_dir = self.project_root / "dist"
         self.exe_name = "BBH3ScanLaunch.exe"
         self.app_dir = (
             self.output_dir if USE_ONEFILE else self.output_dir / "BBH3ScanLaunch"
         )
         self.build_dir = self.project_root / "build_pyinstaller"
+        self.requirements_file = self.project_root / "requirements.txt"
+        self.build_venv_dir = self.project_root / ".build-venv"
+        self.build_venv_bin_dir = self.build_venv_dir / (
+            "Scripts" if sys.platform == "win32" else "bin"
+        )
+        self.bootstrap_python = Path(sys.executable)
+        self.python_exe = self.build_venv_bin_dir / (
+            "python.exe" if sys.platform == "win32" else "python"
+        )
+        self.dependency_stamp = self.build_venv_dir / ".requirements.sha256"
+        self.python_stamp = self.build_venv_dir / ".python-version"
+        self.pyinstaller_stamp = self.build_venv_dir / ".pyinstaller-inputs.sha256"
+        self.command_timeout = command_timeout
 
-        # 设置虚拟环境路径
-        bin_dir = "Scripts" if sys.platform == "win32" else "bin"
-        self.venv_bin_dir = self.venv_dir / bin_dir
-        self.python_exe = self.venv_bin_dir / "python"
-        self.pip_exe = self.venv_bin_dir / "pip"
 
-        if sys.platform == "win32":
-            self.python_exe = self.python_exe.with_suffix(".exe")
-            self.pip_exe = self.pip_exe.with_suffix(".exe")
+def parse_args(argv=None):
+    parser = argparse.ArgumentParser(description="构建 BBH3ScanLaunch")
+    parser.add_argument(
+        "--recreate-build-env",
+        action="store_true",
+        help="删除并重新创建专用 .build-venv",
+    )
+    parser.add_argument(
+        "--refresh-deps",
+        action="store_true",
+        help="在现有 .build-venv 中强制重新安装依赖",
+    )
+    parser.add_argument(
+        "--skip-installer",
+        action="store_true",
+        help="仅构建 PyInstaller 产物，不调用 Inno Setup",
+    )
+    parser.add_argument(
+        "--rebuild",
+        action="store_true",
+        help="忽略输入哈希缓存，强制重新执行 PyInstaller",
+    )
+    parser.add_argument(
+        "--timeout",
+        type=int,
+        default=1800,
+        metavar="SECONDS",
+        help="单个外部命令的超时秒数，0 表示不限制（默认 1800）",
+    )
+    return parser.parse_args(argv)
 
 
-def main():
+def run_command(label, command, *, cwd=None, timeout=1800, env=None):
+    """运行外部命令，继承当前终端输出并报告耗时。"""
+    started_at = time.monotonic()
+    command = [str(arg) for arg in command]
+    print(f"\n[{label}] 开始", flush=True)
+    print(
+        f"[{label}] 命令: {subprocess.list2cmdline(command)}",
+        flush=True,
+    )
+    try:
+        subprocess.run(
+            command,
+            cwd=cwd,
+            check=True,
+            timeout=timeout or None,
+            env=env,
+        )
+    except subprocess.TimeoutExpired as exc:
+        elapsed = time.monotonic() - started_at
+        raise RuntimeError(f"{label} 超时（{elapsed:.1f}s，限制 {timeout}s）") from exc
+    except subprocess.CalledProcessError as exc:
+        elapsed = time.monotonic() - started_at
+        raise RuntimeError(
+            f"{label} 失败（退出码 {exc.returncode}，耗时 {elapsed:.1f}s）"
+        ) from exc
+
+    print(
+        f"[{label}] 完成，耗时 {time.monotonic() - started_at:.1f}s",
+        flush=True,
+    )
+
+
+def run_stage(label, action):
+    """执行 Python 内部阶段并报告耗时。"""
+    started_at = time.monotonic()
+    print(f"\n[{label}] 开始", flush=True)
+    result = action()
+    print(
+        f"[{label}] 完成，耗时 {time.monotonic() - started_at:.1f}s",
+        flush=True,
+    )
+    return result
+
+
+def main(argv=None):
     """主函数"""
-    os.environ["PYTHONUTF8"] = "1"
-    config = BuildConfig()
+    args = parse_args(argv)
+    config = BuildConfig(command_timeout=args.timeout)
 
-    # 设置虚拟环境
-    setup_virtual_environment(config)
+    run_stage(
+        "准备构建环境",
+        lambda: ensure_build_environment(
+            config,
+            recreate=args.recreate_build_env,
+            refresh=args.refresh_deps,
+        ),
+    )
 
-    # 安装依赖
-    install_dependencies(config)
+    run_stage(
+        "PyInstaller 构建",
+        lambda: build_or_reuse_pyinstaller(config, force=args.rebuild),
+    )
+    run_stage("复制资源", lambda: copy_resources(config))
 
-    # 清理缓存
-    clean_build_cache(config)
-
-    # 执行PyInstaller构建
-    run_pyinstaller_build(config)
-
-    # 复制资源文件
-    copy_resources(config)
-
-    # 创建快捷方式 (Windows)
     if sys.platform == "win32":
-        create_windows_shortcuts(config)
+        run_stage("创建快捷方式", lambda: create_windows_shortcuts(config))
 
-    # 创建安装文件
-    build_installer(config)
+    if args.skip_installer:
+        print("\n[安装包] 已按参数跳过 Inno Setup")
+    elif not run_stage("Inno Setup 安装包", lambda: build_installer(config)):
+        raise RuntimeError("Inno Setup 安装包构建失败")
 
-    # 清理临时文件夹
-    cleanup_temp_directories(config)
+    run_stage("清理临时目录", lambda: cleanup_temp_directories(config))
 
     print(f"\n构建成功 v{VERSION}")
     print(f"程序目录: {config.app_dir}")
 
 
-def setup_virtual_environment(config):
-    """设置虚拟环境"""
-    activate_script = config.venv_bin_dir / "activate"
+def dependency_fingerprint(config):
+    """根据 Python 版本和依赖文件计算构建环境指纹。"""
+    digest = hashlib.sha256()
+    digest.update(
+        f"{sys.version_info.major}.{sys.version_info.minor}\n".encode("ascii")
+    )
+    digest.update(config.requirements_file.read_bytes())
+    return digest.hexdigest()
 
-    # 检查并创建虚拟环境（如果不存在）
-    if not activate_script.exists():
-        print(f"创建虚拟环境: {config.venv_dir}")
-        subprocess.run([sys.executable, "-m", "venv", str(config.venv_dir)], check=True)
 
-    # 配置环境
-    clean_environment(config)
+def ensure_build_environment(config, *, recreate=False, refresh=False):
+    """创建并按需更新可缓存的专用构建虚拟环境。"""
+    expected_python_version = f"{sys.version_info.major}.{sys.version_info.minor}\n"
+    recorded_python_version = (
+        config.python_stamp.read_text(encoding="ascii")
+        if config.python_stamp.exists()
+        else ""
+    )
+    if (
+        config.python_exe.exists()
+        and recorded_python_version != expected_python_version
+    ):
+        print("系统 Python 小版本已变化，将重建构建环境")
+        recreate = True
 
-    # 检查Python和Pip是否存在
+    if recreate and config.build_venv_dir.exists():
+        shutil.rmtree(config.build_venv_dir)
+
     if not config.python_exe.exists():
-        sys.exit(f"错误：未找到Python: {config.python_exe}")
-
-    if not config.pip_exe.exists():
-        sys.exit(f"错误：未找到Pip: {config.pip_exe}")
-
-
-def clean_environment(config):
-    """清理环境变量，只保留必要的"""
-    keep_envs = {
-        "PATH": str(config.venv_bin_dir),
-        "SYSTEMROOT": os.environ.get("SYSTEMROOT", ""),
-        "TEMP": os.environ.get("TEMP", ""),
-        "TMP": os.environ.get("TMP", ""),
-        "PYTHONUTF8": "1",
-        "USERPROFILE": os.environ.get("USERPROFILE", ""),
-        "HOME": os.environ.get("HOME", ""),
-    }
-
-    if sys.platform == "win32":
-        sys_paths = [
-            os.environ.get(p, "")
-            for p in ["SystemRoot", "SystemRoot/System32", "SystemRoot/SysWOW64"]
-            if p in os.environ
-        ]
-        keep_envs["PATH"] = os.pathsep.join(
-            [str(config.venv_bin_dir)] + sys_paths + [os.environ.get("PATH", "")]
+        run_command(
+            "创建构建虚拟环境",
+            [
+                config.bootstrap_python,
+                "-m",
+                "venv",
+                config.build_venv_dir,
+            ],
+            timeout=config.command_timeout,
         )
+        config.python_stamp.write_text(
+            expected_python_version,
+            encoding="ascii",
+        )
+        refresh = True
 
-    os.environ.clear()
-    os.environ.update({k: v for k, v in keep_envs.items() if v})
+    expected_fingerprint = dependency_fingerprint(config)
+    recorded_fingerprint = (
+        config.dependency_stamp.read_text(encoding="ascii").strip()
+        if config.dependency_stamp.exists()
+        else ""
+    )
+    if refresh or recorded_fingerprint != expected_fingerprint:
+        install_dependencies(config)
+        config.dependency_stamp.write_text(
+            expected_fingerprint + "\n",
+            encoding="ascii",
+        )
+    else:
+        print(f"构建依赖未变化，复用环境: {config.build_venv_dir}")
+
+    verify_dependencies(config)
 
 
 def install_dependencies(config):
-    """安装项目依赖"""
-    print("更新pip...")
-    subprocess.run(
-        [str(config.python_exe), "-m", "pip", "install", "--upgrade", "pip"], check=True
-    )
-
-    print("安装依赖...")
-    subprocess.run(
+    """在专用构建虚拟环境中安装项目依赖。"""
+    run_command(
+        "安装构建依赖",
         [
-            str(config.pip_exe),
+            config.python_exe,
+            "-m",
+            "pip",
             "install",
             "-r",
-            str(config.project_root / "requirements.txt"),
+            config.requirements_file,
         ],
-        check=True,
+        timeout=config.command_timeout,
     )
+
+
+def verify_dependencies(config):
+    """在构建环境内部检查关键打包依赖。"""
+    imports = (
+        "import PyInstaller, flask, PySide6, cv2, numpy, PIL, pyautogui, "
+        "pyzbar, win32api, cryptography, requests, markdown, psutil"
+    )
+    run_command(
+        "检查构建依赖",
+        [config.python_exe, "-c", imports],
+        timeout=config.command_timeout,
+    )
+    print(f"构建环境可用: {config.build_venv_dir}")
+
+
+def get_build_environment_identity(config):
+    """获取构建环境中实际安装的依赖版本，纳入产物指纹。"""
+    child_env = os.environ.copy()
+    child_env["PYTHONIOENCODING"] = "utf-8"
+    result = subprocess.run(
+        [str(config.python_exe), "-m", "pip", "freeze", "--all"],
+        check=True,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        env=child_env,
+        timeout=config.command_timeout or None,
+    )
+    return result.stdout.replace("\r\n", "\n")
+
+
+def iter_pyinstaller_inputs(config):
+    """枚举所有会影响 PyInstaller 产物的项目文件。"""
+    fixed_files = (
+        config.project_root / "run.py",
+        config.requirements_file,
+        config.project_root / "BHimage.ico",
+        config.project_root / "scripts" / "build.py",
+    )
+    roots = (
+        config.project_root / "src",
+        config.project_root / "resources" / "templates",
+        config.project_root / "resources" / "pictures_to_match",
+    )
+    files = [path for path in fixed_files if path.is_file()]
+    for root in roots:
+        if root.exists():
+            files.extend(
+                path
+                for path in root.rglob("*")
+                if path.is_file()
+                and "__pycache__" not in path.parts
+                and path.suffix.casefold() not in {".pyc", ".pyo"}
+            )
+    return sorted(files, key=lambda path: path.as_posix().lower())
+
+
+def calculate_pyinstaller_fingerprint(config, environment_identity=None):
+    """计算源码、打包配置、资源和构建依赖的稳定哈希。"""
+    digest = hashlib.sha256()
+    digest.update(f"onefile={USE_ONEFILE}\n".encode("ascii"))
+    identity = (
+        get_build_environment_identity(config)
+        if environment_identity is None
+        else environment_identity
+    )
+    digest.update(identity.encode("utf-8"))
+
+    for path in iter_pyinstaller_inputs(config):
+        relative_path = path.relative_to(config.project_root).as_posix()
+        digest.update(f"\nfile:{relative_path}\n".encode("utf-8"))
+        with path.open("rb") as file:
+            for chunk in iter(lambda: file.read(1024 * 1024), b""):
+                digest.update(chunk)
+    return digest.hexdigest()
+
+
+def build_or_reuse_pyinstaller(config, *, force=False):
+    """输入未变化且产物有效时复用 dist，否则执行完整 PyInstaller。"""
+    fingerprint = calculate_pyinstaller_fingerprint(config)
+    cached_fingerprint = (
+        config.pyinstaller_stamp.read_text(encoding="ascii").strip()
+        if config.pyinstaller_stamp.exists()
+        else ""
+    )
+    executable = config.app_dir / config.exe_name
+
+    if not force and fingerprint == cached_fingerprint and executable.is_file():
+        print(f"输入未变化，复用 PyInstaller 产物: {executable}")
+        return False
+
+    if force:
+        print("已要求强制重建 PyInstaller 产物")
+    elif cached_fingerprint and fingerprint != cached_fingerprint:
+        print("检测到源码、资源、构建配置或依赖变化，将重新打包")
+    else:
+        print("未找到可复用的 PyInstaller 产物，将执行打包")
+
+    clean_build_cache(config)
+    run_pyinstaller_build(config)
+    if not executable.is_file():
+        raise RuntimeError(f"PyInstaller 未生成预期程序: {executable}")
+    config.pyinstaller_stamp.parent.mkdir(parents=True, exist_ok=True)
+    config.pyinstaller_stamp.write_text(fingerprint + "\n", encoding="ascii")
+    return True
 
 
 def clean_build_cache(config):
@@ -158,68 +363,102 @@ def clean_build_cache(config):
         config.project_root / "dist",
     ]:
         shutil.rmtree(cache_dir, ignore_errors=True)
+        if cache_dir.exists():
+            raise RuntimeError(
+                f"无法清理构建目录: {cache_dir}\n"
+                "请关闭正在运行的 BBH3ScanLaunch 或占用该目录的程序后重试。"
+            )
 
 
 def run_pyinstaller_build(config):
     """执行PyInstaller构建"""
+    pyzbar_dir = get_build_package_dir(config, "pyzbar")
+
     with tempfile.TemporaryDirectory() as tmpdir:
         # 准备构建目录
         shutil.rmtree(config.build_dir, ignore_errors=True)
         config.build_dir.mkdir(parents=True, exist_ok=True)
 
-        # 构建命令
-        cmd = [
-            sys.executable,
-            "-m",
+        cmd = build_pyinstaller_command(config, tmpdir, pyzbar_dir)
+        child_env = os.environ.copy()
+        # Windows 本地工具通常输出 CP936。强制 UTF-8 会导致 PyInstaller
+        # 内部 subprocess 读取线程出现 UnicodeDecodeError。
+        child_env.pop("PYTHONUTF8", None)
+        child_env.pop("PYTHONIOENCODING", None)
+
+        run_command(
             "PyInstaller",
-            "--name=BBH3ScanLaunch",
-            "--workpath",
-            str(config.project_root / "build"),
-            "--distpath",
-            str(config.output_dir),
-            "--specpath",
-            tmpdir,
-            "--paths",
-            str(config.project_root / "src"),
-            "--noconsole",
-            "--uac-admin",
-            "-i",
-            str(config.project_root / "BHimage.ico"),
-            "--exclude-module",
-            "PyQt5",
-            "--exclude-module",
-            "PyQt6",
-            "--hidden-import",
-            "bbh3_scan_launch",
-            "--hidden-import",
-            "bbh3_scan_launch.main",
-            "--add-binary",
-            f"{config.venv_dir / 'Lib' / 'site-packages' / 'pyzbar' / 'libiconv.dll'};.",
-            "--add-binary",
-            f"{config.venv_dir / 'Lib' / 'site-packages' / 'pyzbar' / 'libzbar-64.dll'};.",
-            "--add-data",
-            f"{config.project_root / 'resources' / 'templates'};resources/templates",
-            "--add-data",
-            f"{config.project_root / 'resources' / 'pictures_to_match'};resources/pictures_to_match",
-            str(config.project_root / "run.py"),
-        ]
+            cmd,
+            cwd=config.build_dir,
+            timeout=config.command_timeout,
+            env=child_env,
+        )
 
-        if USE_ONEFILE:
-            cmd.insert(4, "--onefile")
 
-        # 执行构建
-        try:
-            result = subprocess.run(
-                cmd, check=True, capture_output=True, text=True, cwd=config.build_dir
-            )
-            if result.stderr:
-                print("PyInstaller 警告:", result.stderr)
-            print("PyInstaller 构建成功")
-        except subprocess.CalledProcessError as e:
-            print(f"PyInstaller 失败: {e.returncode}")
-            print("输出:", e.stdout)
-            print("错误:", e.stderr)
-            raise
+def get_build_package_dir(config, package_name):
+    """查询构建虚拟环境中的包目录。"""
+    child_env = os.environ.copy()
+    child_env["PYTHONIOENCODING"] = "utf-8"
+    result = subprocess.run(
+        [
+            str(config.python_exe),
+            "-c",
+            (
+                "import importlib.util, pathlib; "
+                f"spec = importlib.util.find_spec({package_name!r}); "
+                "assert spec and spec.origin; "
+                "print(pathlib.Path(spec.origin).parent)"
+            ),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        env=child_env,
+        timeout=config.command_timeout or None,
+    )
+    return Path(result.stdout.strip())
+
+
+def build_pyinstaller_command(config, spec_dir, pyzbar_dir):
+    """构造由专用虚拟环境执行的最小化 PyInstaller 命令。"""
+    cmd = [
+        str(config.python_exe),
+        "-m",
+        "PyInstaller",
+        "--name=BBH3ScanLaunch",
+        "--noconfirm",
+        "--workpath",
+        str(config.project_root / "build"),
+        "--distpath",
+        str(config.output_dir),
+        "--specpath",
+        str(spec_dir),
+        "--paths",
+        str(config.project_root / "src"),
+        "--noconsole",
+        "--uac-admin",
+        "-i",
+        str(config.project_root / "BHimage.ico"),
+        "--hidden-import",
+        "bbh3_scan_launch",
+        "--hidden-import",
+        "bbh3_scan_launch.main",
+        "--add-binary",
+        f"{pyzbar_dir / 'libiconv.dll'};.",
+        "--add-binary",
+        f"{pyzbar_dir / 'libzbar-64.dll'};.",
+        "--add-data",
+        f"{config.project_root / 'resources' / 'templates'};resources/templates",
+        "--add-data",
+        f"{config.project_root / 'resources' / 'pictures_to_match'};resources/pictures_to_match",
+    ]
+    for module in PYINSTALLER_EXCLUDES:
+        cmd.extend(("--exclude-module", module))
+    if USE_ONEFILE:
+        cmd.append("--onefile")
+    cmd.append(str(config.project_root / "run.py"))
+    return cmd
 
 
 def copy_resources(config):
@@ -318,13 +557,11 @@ def build_installer(config):
         output_dir.mkdir(exist_ok=True)
 
         print("正在编译安装包...")
-        result = subprocess.run(
+        run_command(
+            "Inno Setup",
             [str(inno_compiler), str(iss_file)],
-            check=True,
-            capture_output=True,
-            text=True,
             cwd=config.project_root / "scripts",
-            encoding="utf-8",
+            timeout=config.command_timeout,
         )
         print("编译完成")
 
@@ -343,9 +580,6 @@ def build_installer(config):
 
         return True
 
-    except subprocess.CalledProcessError as e:
-        print(f"编译失败: {e.stderr if e.stderr else e.stdout}")
-        return False
     except Exception as e:
         print(f"发生错误: {str(e)}")
         import traceback
@@ -429,8 +663,8 @@ SolidCompression=yes
 PrivilegesRequired=admin
 SetupIconFile={icon_path}
 AppPublisher=BBH3ScanLaunch
-ArchitecturesInstallIn64BitMode=x64
-ArchitecturesAllowed=x64
+ArchitecturesInstallIn64BitMode=x64compatible
+ArchitecturesAllowed=x64compatible
 
 [Files]
 Source: "{dist_path}\\*"; DestDir: "{{app}}\\BBH3ScanLaunch"; Flags: ignoreversion recursesubdirs createallsubdirs
@@ -449,6 +683,29 @@ Root: HKLM; Subkey: "SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\AppCompatF
     ValueType: String; ValueName: "{{app}}\\BBH3ScanLaunch\\{{#MyAppExeName}}"; ValueData: "RUNASADMIN"; Flags: uninsdeletevalue
 
 [Code]
+function PrepareToInstall(var NeedsRestart: Boolean): String;
+var
+  legacyConfigPath: string;
+  userDataPath: string;
+  persistentConfigPath: string;
+begin
+  Result := '';
+  legacyConfigPath := ExpandConstant('{{app}}\\BBH3ScanLaunch\\config\\config.json');
+  userDataPath := ExpandConstant('{{localappdata}}\\BBH3ScanLaunch');
+  persistentConfigPath := userDataPath + '\\config.json';
+
+  if FileExists(legacyConfigPath) and not FileExists(persistentConfigPath) then
+  begin
+    if not ForceDirectories(userDataPath) then
+    begin
+      Result := '无法创建用户配置目录: ' + userDataPath;
+      exit;
+    end;
+    if not CopyFile(legacyConfigPath, persistentConfigPath, False) then
+      Result := '无法迁移旧版配置文件: ' + legacyConfigPath;
+  end;
+end;
+
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
 var
   appDataPath: string;
@@ -579,7 +836,8 @@ def update_version_info(config, setup_filename):
     # 写入更新后的数据
     try:
         with open(version_file, "w", encoding="utf-8") as f:
-            json.dump(existing_data, f, indent=4, ensure_ascii=False)
+            json.dump(existing_data, f, indent=2, ensure_ascii=False)
+            f.write("\n")
         print(f"版本信息已更新到: {version_file}")
     except Exception as e:
         print(f"错误：写入version.json失败: {e}")

@@ -1,33 +1,15 @@
 # config_utils.py
 import json
-import os
+import shutil
 import threading
 import logging
+from pathlib import Path
 from json.decoder import JSONDecodeError
-from ..constants import CONFIG_FILE_PATH
-from .exception_utils import handle_exceptions
-
-# 延迟导入，避免循环依赖
-_version_manager = None
-_network_manager = None
-
-
-def _get_version_manager():
-    global _version_manager
-    if _version_manager is None:
-        from .version_utils import version_manager
-
-        _version_manager = version_manager
-    return _version_manager
-
-
-def _get_network_manager():
-    global _network_manager
-    if _network_manager is None:
-        from .network_utils import network_manager
-
-        _network_manager = network_manager
-    return _network_manager
+from ..constants import (
+    CONFIG_FILE,
+    LEGACY_CONFIG_FILE_PATH,
+    get_user_data_dir,
+)
 
 
 class ConfigManager:
@@ -52,20 +34,42 @@ class ConfigManager:
         # 而是每次启动或检查更新时从 version.json 获取
     }
 
-    def __init__(self):
+    def __init__(self, config_path=None, legacy_paths=None):
         self.lock = threading.Lock()
         self.bh_info = {}
         self.data = {}
         self.cap = None
+        self.config_path = Path(config_path or Path(get_user_data_dir()) / CONFIG_FILE)
+        self.legacy_paths = tuple(
+            Path(path)
+            for path in (
+                legacy_paths if legacy_paths is not None else (LEGACY_CONFIG_FILE_PATH,)
+            )
+        )
         # 运行期临时覆盖（不落盘，仅当前进程生效）
         self._temp_mode = False
         self._temp_overrides = {}
-        # 从权威源获取版本
-        self.current_version = _get_version_manager().get_version_info("current")
-        # 初始化 oa_token 和 bh_ver 属性
-        self.oa_token = None
-        self.bh_ver = None
+        self._migrate_legacy_config()
         self.config = self._load_config()
+
+    def _migrate_legacy_config(self):
+        """首次使用用户数据目录时复制旧安装目录中的配置。"""
+        if self.config_path.exists():
+            return
+        for legacy_path in self.legacy_paths:
+            if not legacy_path.is_file() or legacy_path == self.config_path:
+                continue
+            try:
+                self.config_path.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(legacy_path, self.config_path)
+                logging.info(
+                    "已迁移旧版配置: %s -> %s",
+                    legacy_path,
+                    self.config_path,
+                )
+                return
+            except OSError:
+                logging.exception("迁移旧版配置失败: %s", legacy_path)
 
     # ---------------- 运行期临时配置覆盖（避免误持久化） ----------------
     def begin_temp_overrides(self, overrides: dict):
@@ -99,10 +103,10 @@ class ConfigManager:
 
     def _load_config(self):
         """加载配置文件"""
-        config_path = CONFIG_FILE_PATH
+        config_path = self.config_path
 
         try:
-            with open(config_path) as fp:
+            with config_path.open(encoding="utf-8") as fp:
                 loaded_config = json.load(fp)
 
                 # 提取有效字段（只保留在DEFAULT_CONFIG中存在的键）
@@ -118,25 +122,25 @@ class ConfigManager:
                 # 如果原始配置有无效字段，更新文件
                 if loaded_config != merged_config:
                     logging.info("配置文件包含无效字段，正在优化...")
-                    with open(config_path, "w") as f:
+                    with config_path.open("w", encoding="utf-8") as f:
                         json.dump(merged_config, f, indent=4)
 
                 return merged_config
         except FileNotFoundError:
             # 如果配置文件不存在，创建默认配置文件
             logging.info("配置文件不存在，正在创建默认配置...")
-            os.makedirs(os.path.dirname(config_path), exist_ok=True)
-            with open(config_path, "w") as f:
+            config_path.parent.mkdir(parents=True, exist_ok=True)
+            with config_path.open("w", encoding="utf-8") as f:
                 json.dump(self.DEFAULT_CONFIG, f, indent=4)
             return self.DEFAULT_CONFIG.copy()
         except JSONDecodeError as e:
             # 如果JSON格式错误，备份原文件并创建默认配置
             logging.warning(f"配置文件JSON格式错误: {e}，正在创建默认配置...")
-            backup_path = config_path + ".backup"
-            if os.path.exists(config_path):
-                os.rename(config_path, backup_path)
+            backup_path = config_path.with_suffix(config_path.suffix + ".backup")
+            if config_path.exists():
+                shutil.move(config_path, backup_path)
                 logging.info(f"原配置文件已备份到: {backup_path}")
-            with open(config_path, "w") as f:
+            with config_path.open("w", encoding="utf-8") as f:
                 json.dump(self.DEFAULT_CONFIG, f, indent=4)
             return self.DEFAULT_CONFIG.copy()
 
@@ -151,9 +155,9 @@ class ConfigManager:
                         config_temp[key] = old[key]
 
             # 写入配置文件
-            config_path = CONFIG_FILE_PATH
-            os.makedirs(os.path.dirname(config_path), exist_ok=True)
-            with open(config_path, "w") as f:
+            config_path = self.config_path
+            config_path.parent.mkdir(parents=True, exist_ok=True)
+            with config_path.open("w", encoding="utf-8") as f:
                 json.dump(config_temp, f, indent=4, separators=(",", ": "))
             self.config = config_temp
 
@@ -165,72 +169,3 @@ class ConfigManager:
         """临时修改某项配置文件"""
         self.config[key] = value
         self.write_conf(self.config)
-
-    def refresh_oa_info(self, source=None):
-        """
-        公开方法：刷新 OA Token 和 BH 版本信息。
-        可以传递 source 参数来指定数据源。
-        """
-        self.oa_token, self.bh_ver = self._fetch_oa_info(source=source)
-        # 如果需要，可以在这里触发保存到某个临时文件或缓存，
-        # 但通常这些信息是每次需要时动态获取的。
-
-    def check_program_update(self, source=None):
-        """
-        检查程序更新。
-        可以传递 source 参数来指定版本信息和文件的来源。
-        """
-        # 获取远程版本信息（不保存文件）
-        remote_version_info = _get_network_manager().get_remote_version_info(
-            source=source
-        )
-        if not remote_version_info:
-            return {"has_update": False, "error": "无法获取远程版本信息"}
-
-        # 比较版本
-        current_version = _get_version_manager().get_version_info("current")
-        remote_version = remote_version_info.get("app_info", {}).get("version", "0.0.0")
-
-        # 简单版本比较
-        def version_tuple(v):
-            return tuple(map(int, v.split(".")))
-
-        has_update = version_tuple(remote_version) > version_tuple(current_version)
-
-        result = {
-            "has_update": has_update,
-            "current_version": current_version,
-            "remote_version": remote_version,
-        }
-
-        # 只要远程版本不低于当前版本，就更新本地文件
-        should_update_files = version_tuple(remote_version) >= version_tuple(
-            current_version
-        )
-
-        if should_update_files:
-            # 更新本地文件（仅在远程版本号大于等于本地时才更新version.json和changelog）
-            if not _get_network_manager().fetch_remote_files(
-                source=source, should_update_files=True
-            ):
-                return {"has_update": False, "error": "无法更新本地文件"}
-
-            # 获取下载链接
-            download_links = (
-                _get_network_manager().source_manager.get_links_by_category(
-                    "download_url"
-                )
-            )
-            if download_links:
-                # 返回第一个可用的下载链接
-                priority = _get_network_manager().source_manager.get_priority_order()
-                for source_name in priority:
-                    if source_name in download_links:
-                        result["download_url"] = download_links[source_name]
-                        break
-
-        return result
-
-
-# 创建配置管理器实例
-config_manager = ConfigManager()

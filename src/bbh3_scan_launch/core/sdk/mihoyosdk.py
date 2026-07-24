@@ -7,10 +7,7 @@ import requests
 import time
 import logging
 
-# 本地模块 imports
-from ...dependency_container import get_version_manager
-
-version_manager = get_version_manager()
+_version_manager = None
 
 url = "https://api-sdk.mihoyo.com/bh3_cn/combo/granter/login/v2/login"
 verifyBody = (
@@ -28,6 +25,12 @@ local_dispatch = json.loads("{}")
 local_bh_ver = "5.8.0"
 has_dispatch = False
 has_bh_ver = False
+
+
+def configure_version_manager(version_manager) -> None:
+    """注入版本配置读取器，避免 SDK 反向依赖应用级全局容器。"""
+    global _version_manager
+    _version_manager = version_manager
 
 
 def bh3Sign(data):
@@ -57,11 +60,9 @@ async def getBHVer(cache_bh_ver=None):
 
     if has_bh_ver:
         return local_bh_ver
-    feedback = await sendGet(
-        "https://api-v2.scanner.hellocraft.xyz/v4/hi3_version", cache_bh_ver
-    )
-    if feedback == cache_bh_ver:
-        local_bh_ver = cache_bh_ver["bh_ver"]
+    feedback = await sendGet("https://api-v2.scanner.hellocraft.xyz/v4/hi3_version")
+    if not isinstance(feedback, dict) or not feedback.get("version"):
+        local_bh_ver = cache_bh_ver or local_bh_ver
         logging.warning("获取版本号失败，使用缓存版本号")
     else:
         local_bh_ver = feedback["version"]
@@ -92,7 +93,11 @@ async def getOAServer(oa_token=None):
     bh_ver = await getBHVer()
 
     # 方式一：从 version_manager 获取对应版本的 dispatch
-    dispatch = version_manager.get_dispatch_for_version(bh_ver)
+    if _version_manager is None:
+        logging.error("版本管理器未初始化，无法获取 OA 服务器")
+        return "{}"
+
+    dispatch = _version_manager.get_dispatch_for_version(bh_ver)
     if dispatch and dispatch.strip():
         logging.debug(f"从 version.json 获取 {bh_ver} 版本的 dispatch 成功")
         has_dispatch = True
@@ -102,7 +107,7 @@ async def getOAServer(oa_token=None):
         logging.debug(f"version.json 中无 {bh_ver} 版本的有效 dispatch 字段")
 
     # 方式二：使用对应版本的 oa_token 通过 OA 服务器接口获取分发信息
-    oa_token = version_manager.get_oa_token_for_version(bh_ver)
+    oa_token = _version_manager.get_oa_token_for_version(bh_ver)
     if not oa_token:
         logging.error(f"version.json 中无 {bh_ver} 版本的有效 oa_token")
         return "{}"

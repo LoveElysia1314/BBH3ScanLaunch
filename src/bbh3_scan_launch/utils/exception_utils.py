@@ -26,13 +26,18 @@ def handle_exceptions(
     """
 
     def decorator(func: Callable) -> Callable:
+        def _log_exception(exc: Exception) -> None:
+            log_func = getattr(logging, log_level, None)
+            if not callable(log_func):
+                log_func = logging.error
+            log_func(f"{error_msg}: {exc}")
+
         @functools.wraps(func)
         def wrapper(*args, **kwargs):
             try:
                 return func(*args, **kwargs)
             except Exception as e:
-                log_func = getattr(logging, log_level, logging.error)
-                log_func(f"{error_msg}: {e}")
+                _log_exception(e)
                 return return_value
 
         @functools.wraps(func)
@@ -40,8 +45,7 @@ def handle_exceptions(
             try:
                 return await func(*args, **kwargs)
             except Exception as e:
-                log_func = getattr(logging, log_level, logging.error)
-                log_func(f"{error_msg}: {e}")
+                _log_exception(e)
                 return return_value
 
         # 检查被装饰的函数是否是异步函数

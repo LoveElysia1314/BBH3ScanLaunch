@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 import logging
+from typing import Any, Optional, Protocol
 from PySide6.QtCore import Qt, QMetaObject, QCoreApplication
 from PySide6.QtWidgets import (
     QDialog,
@@ -19,11 +20,18 @@ from PySide6.QtWidgets import (
 )
 import markdown
 
-# 使用依赖注入容器获取管理器实例
-from ..dependency_container import get_version_manager, get_config_manager
+from .content.help_text import get_help_text
 
-version_manager = get_version_manager()
-config_manager = get_config_manager()
+
+class _VersionManager(Protocol):
+    def get_version_info(self, key: str) -> str: ...
+
+    def read_changelog(self) -> str: ...
+
+
+class _ConfigManager(Protocol):
+    @property
+    def config(self) -> dict[str, Any]: ...
 
 
 class LoginDialog(QDialog):
@@ -32,9 +40,18 @@ class LoginDialog(QDialog):
     提供B站账号和密码输入表单，用于用户认证
     """
 
-    def __init__(self, parent=None):
+    def __init__(
+        self,
+        parent: QDialog | None = None,
+        config_manager: Optional[_ConfigManager] = None,
+    ):
         super().__init__(parent)
         self.setWindowTitle("登陆账号")
+        self._config_manager = (
+            config_manager
+            if config_manager is not None
+            else self._get_parent_config_manager(parent)
+        )
 
         # 主布局
         main_layout = QVBoxLayout(self)
@@ -55,12 +72,12 @@ class LoginDialog(QDialog):
         # 预填账号密码
         self.prefill_credentials()
 
-    def prefill_credentials(self):
+    def prefill_credentials(self) -> None:
         """预填账号密码"""
         try:
-            from ..utils.config_utils import config_manager
-
-            config = config_manager.config
+            if self._config_manager is None:
+                return
+            config = self._config_manager.config
             if config.get("account"):
                 self.account.setText(config["account"])
             if config.get("password"):
@@ -68,21 +85,27 @@ class LoginDialog(QDialog):
         except Exception as e:
             logging.warning(f"预填账号密码失败: {e}")
 
-    def reject(self):
+    @staticmethod
+    def _get_parent_config_manager(parent) -> Optional[_ConfigManager]:
+        if parent is None:
+            return None
+        return getattr(getattr(parent, "_context", None), "config_manager", None)
+
+    def reject(self) -> None:
         """重写reject方法，确保关闭对话框时重置按钮状态"""
         # 重置登录按钮状态
         if hasattr(self.parent(), "reset_login_button"):
             self.parent().reset_login_button()
         super().reject()
 
-    def closeEvent(self, event):
+    def closeEvent(self, event) -> None:
         """处理窗口关闭事件"""
         # 重置登录按钮状态
         if hasattr(self.parent(), "reset_login_button"):
             self.parent().reset_login_button()
         super().closeEvent(event)
 
-    def create_form_controls(self, layout):
+    def create_form_controls(self, layout) -> None:
         """创建账号密码输入表单控件"""
         fields = [
             ("账号:", "account", "请输入账号"),
@@ -106,10 +129,10 @@ class LoginDialog(QDialog):
 
 
 class Ui_MainWindow:
-    """
-    主窗口UI布局
-    包含日志显示区、功能说明区和控制面板，用于崩坏3扫码登录器
-    """
+    """主窗口UI布局，包含日志显示区、功能说明区和控制面板。"""
+
+    def __init__(self, version_manager: _VersionManager):
+        self.version_manager = version_manager
 
     def setupUi(self, MainWindow):
         MainWindow.setObjectName("MainWindow")
@@ -172,7 +195,8 @@ class Ui_MainWindow:
         self.helpText = QTextBrowser()
         self.helpText.setOpenExternalLinks(True)
         # 将Markdown转换为HTML并设置
-        help_markdown = self.get_help_text()
+        current_version = self.version_manager.get_version_info("current")
+        help_markdown = get_help_text(current_version)
         help_html = markdown.markdown(help_markdown, extensions=["extra", "codehilite"])
         self.helpText.setHtml(help_html)
         helpLayout.addWidget(self.helpText)
@@ -184,7 +208,7 @@ class Ui_MainWindow:
         self.changelogText = QTextBrowser()
         self.changelogText.setOpenExternalLinks(True)
         # 将Markdown转换为HTML并设置
-        changelog_markdown = version_manager.read_changelog()
+        changelog_markdown = self.version_manager.read_changelog()
         changelog_html = markdown.markdown(
             changelog_markdown, extensions=["extra", "codehilite"]
         )
@@ -273,7 +297,7 @@ class Ui_MainWindow:
 
         # 更新状态标签
         self.updateStatusLabel = QLabel(
-            f"当前版本：{version_manager.get_version_info('current')}"
+            f"当前版本：{self.version_manager.get_version_info('current')}"
         )
         self.updateStatusLabel.setAlignment(Qt.AlignmentFlag.AlignCenter)
         gridLayout.addWidget(self.updateStatusLabel, 0, 0, 1, 1)
@@ -292,72 +316,9 @@ class Ui_MainWindow:
         self.sourceListWidget.setSelectionMode(
             QListWidget.SelectionMode.SingleSelection
         )
-        # 读取config.json中的download_priority
-        try:
-            priority = config_manager.get_config(
-                "download_priority", ["gitee", "github"]
-            )
-        except Exception:
-            priority = ["gitee", "github"]
-        self.sourceListWidget.addItems(priority)
         gridLayout.addWidget(self.sourceListWidget, 3, 0, 1, 1)
 
-        # 绑定顺序变化事件，自动写入config.json
-        def update_priority():
-            new_priority = [
-                self.sourceListWidget.item(i).text()
-                for i in range(self.sourceListWidget.count())
-            ]
-            try:
-                config_manager.set_config("download_priority", new_priority)
-            except Exception:
-                pass
-
-        self.sourceListWidget.model().rowsMoved.connect(update_priority)
-
         layout.addWidget(self.updateGroup)
-
-    def get_help_text(self):
-        """返回程序使用说明的Markdown格式文本"""
-        return (
-            "### 登录B站账号\n\n"
-            "- 点击“登陆B站账户”\n"
-            "- 输入账号和密码\n"
-            "- 信息会自动保存，后续可直接使用\n\n"
-            "### 配置游戏路径\n\n"
-            "- 点击“配置游戏路径”\n"
-            "- 选择 BH3.exe\n"
-            "- 参考：`C:\\miHoYo Launcher\\games\\Honkai Impact 3rd Game\\BH3.exe`\n\n"
-            "### 常用操作\n\n"
-            "- 解析二维码：自动读取剪贴板中的登录码并扫码\n"
-            "- 自动截屏：自动截取游戏画面（支持前后台）\n"
-            "- 自动退出：扫码完成后自动关闭程序\n"
-            "- 自动点击：自动切换登录方式并进入游戏（需管理员权限）\n"
-            "- DEBUG：显示详细日志，便于排查问题\n"
-            "- 管理模板：打开模板图片文件夹，方便添加或管理分辨率模板\n"
-            "- 打开崩坏3：直接启动游戏\n"
-            "- 一键进入舰桥：启动并自动完成登录（需管理员权限）\n\n"
-            "### 更新与下载源\n\n"
-            "- 检查更新：点击“检查更新”，启动时也会自动检查\n"
-            "- 下载源优先级：在“下载源优先级调整”中拖拽排序，自动保存\n"
-            "- 建议：国内优先 Gitee，海外优先 GitHub\n\n"
-            "### 权限与系统要求\n\n"
-            "- 管理员权限：一键进入舰桥、自动点击需要\n"
-            "- 以管理员运行：右键程序 → 以管理员身份运行\n"
-            "- 系统：Windows 10/11；需网络；建议 1920x1080 分辨率及以上\n\n"
-            "### 故障排除\n\n"
-            "- 登录失败：检查网络/账号密码，重试\n"
-            "- 找不到游戏窗口：确认已启动、未最小化，必要时重启游戏\n"
-            "- 权限不足：以管理员身份运行\n"
-            "- 更新失败：检查网络，调整下载源优先级，稍后重试\n"
-            "- 配置异常：删除 `config` 文件夹并重启，系统会重建\n\n"
-            "### 项目与支持\n\n"
-            "- 当前版本：" + version_manager.get_version_info("current") + "\n"
-            "- 项目主页：https://github.com/LoveElysia1314/BBH3ScanLaunch\n"
-            "- 问题反馈：请在项目主页提交 Issue\n\n"
-            "---\n\n"
-            "Powered by LoveElysia1314  ·  Thanks to Hao_cen\n"
-        )
 
     def retranslateUi(self, MainWindow):
         """设置窗口标题和初始化文本"""
@@ -383,9 +344,9 @@ class Ui_MainWindow:
         self.debugPrint.clicked.connect(
             lambda: MainWindow.toggle_feature("debug_print", self.debugPrint, "当前")
         )
-        self.configGamePathBtn.clicked.connect(MainWindow.configGamePath)
-        self.launchGameBtn.clicked.connect(MainWindow.launchGame)
-        self.oneClickLoginBtn.clicked.connect(MainWindow.oneClickLogin)
+        self.configGamePathBtn.clicked.connect(MainWindow.config_game_path)
+        self.launchGameBtn.clicked.connect(MainWindow.launch_game)
+        self.oneClickLoginBtn.clicked.connect(MainWindow.one_click_login)
 
         # 连接打开模板文件夹按钮
         self.openTemplateBtn.clicked.connect(MainWindow.open_template_folder)
@@ -394,4 +355,6 @@ class Ui_MainWindow:
         self.checkUpdateBtn.clicked.connect(MainWindow.check_for_updates)
 
 
-ui = Ui_MainWindow()  # 实例化 UI
+def create_main_window(version_manager: _VersionManager) -> "Ui_MainWindow":
+    """工厂函数：创建主窗口 UI 对象。"""
+    return Ui_MainWindow(version_manager=version_manager)
