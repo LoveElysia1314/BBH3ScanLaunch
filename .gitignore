@@ -31,6 +31,7 @@ BBH3ScanLunch.spec
 scripts/setup.iss
 *.spec
 /venv
+/.venv/
 /.build-venv/
 *.zip
 *.lnk
